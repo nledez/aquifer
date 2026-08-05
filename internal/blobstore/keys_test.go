@@ -53,12 +53,12 @@ func TestHashFromBlobKeyRejectsMalformedKeys(t *testing.T) {
 
 	bad := []string{
 		"mirror/blobs/sha256/ab/cd/short",
-		"mirror/blobs/sha256/" + testHash,                  // unsharded
-		"mirror/blobs/sha512/ab/cd/" + testHash,            // wrong algorithm
-		"mirror/blobs/sha256/zz/cd/" + testHash,            // shard is not hex
-		"mirror/blobs/sha256/ff/cd/" + testHash,            // shard disagrees with the hash
-		"other/blobs/sha256/ab/cd/" + testHash,             // wrong prefix
-		"mirror/manifests/debian/1754400000-aaaa.tsv.zst",  // not a blob at all
+		"mirror/blobs/sha256/" + testHash,                 // unsharded
+		"mirror/blobs/sha512/ab/cd/" + testHash,           // wrong algorithm
+		"mirror/blobs/sha256/zz/cd/" + testHash,           // shard is not hex
+		"mirror/blobs/sha256/ff/cd/" + testHash,           // shard disagrees with the hash
+		"other/blobs/sha256/ab/cd/" + testHash,            // wrong prefix
+		"mirror/manifests/debian/1754400000-aaaa.tsv.zst", // not a blob at all
 	}
 	for _, key := range bad {
 		if got, ok := HashFromBlobKey("mirror", key); ok {

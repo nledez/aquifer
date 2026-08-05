@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 )
@@ -23,7 +24,7 @@ Commands:
 `
 
 // Main dispatches a subcommand and returns the process exit code.
-func Main(args []string, stdout, stderr io.Writer) int {
+func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
@@ -36,7 +37,11 @@ func Main(args []string, stdout, stderr io.Writer) int {
 	case "help", "--help", "-h":
 		fmt.Fprint(stdout, usage)
 		return 0
-	case "serve", "publish", "gc", "ping":
+	case "publish":
+		return runPublish(ctx, args[1:], stdout, stderr)
+	case "gc":
+		return runGC(ctx, args[1:], stdout, stderr)
+	case "serve", "ping":
 		fmt.Fprintf(stderr, "aquifer: %s is not implemented yet\n", args[0])
 		return 2
 	default:

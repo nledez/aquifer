@@ -176,4 +176,3 @@ func OpenIndex(name string, r io.Reader) (io.ReadCloser, error) {
 func IndexVariants(base string) []string {
 	return []string{base, base + ".gz", base + ".bz2"}
 }
-

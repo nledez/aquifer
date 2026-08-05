@@ -4,11 +4,19 @@
 package main
 
 import (
+	"context"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/nledez/aquifer/internal/cli"
 )
 
 func main() {
-	os.Exit(cli.Main(os.Args[1:], os.Stdout, os.Stderr))
+	// A publication or a GC run can take minutes. Cancelling on a signal lets
+	// it stop between operations rather than being killed mid-upload.
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	os.Exit(cli.Main(ctx, os.Args[1:], os.Stdout, os.Stderr))
 }
