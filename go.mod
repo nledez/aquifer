@@ -3,6 +3,7 @@ module github.com/nledez/aquifer
 go 1.26.5
 
 require (
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.19.1
 	github.com/minio/minio-go/v7 v7.2.1
