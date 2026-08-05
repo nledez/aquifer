@@ -71,6 +71,21 @@ func (m *Manifest) Lookup(path string) (Entry, bool) {
 	return e, ok
 }
 
+// LookupDigest finds an entry by digest rather than by path, which is what a
+// by-hash request needs.
+//
+// It scans rather than keeping a reverse index: a few hundred entries per
+// revision make the scan free, while a second map per revision would cost real
+// heap across every retained revision of every repo.
+func (m *Manifest) LookupDigest(hash string) (Entry, bool) {
+	for _, path := range m.order {
+		if e := m.entries[path]; e.SHA256 == hash {
+			return e, true
+		}
+	}
+	return Entry{}, false
+}
+
 // All iterates the entries in path order.
 func (m *Manifest) All() iter.Seq[Entry] {
 	return func(yield func(Entry) bool) {

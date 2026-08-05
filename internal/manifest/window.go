@@ -79,17 +79,39 @@ func (w *Window) Retained() []*Manifest {
 
 // Lookup resolves a serving path against the window.
 func (w *Window) Lookup(path string) (Entry, bool) {
+	e, _, ok := w.Resolve(path)
+	return e, ok
+}
+
+// Resolve is Lookup plus the revision the entry came from, which is what the
+// response's Last-Modified is derived from.
+func (w *Window) Resolve(path string) (Entry, *Manifest, bool) {
 	retained := w.state.Load().retained
 	if len(retained) == 0 {
-		return Entry{}, false
+		return Entry{}, nil, false
 	}
 	if IsMetadata(path) {
-		return retained[0].Lookup(path)
+		e, ok := retained[0].Lookup(path)
+		return e, retained[0], ok
 	}
 	for _, m := range retained {
 		if e, ok := m.Lookup(path); ok {
-			return e, true
+			return e, m, true
 		}
 	}
-	return Entry{}, false
+	return Entry{}, nil, false
+}
+
+// ResolveDigest finds a blob by digest across the retained revisions.
+//
+// A by-hash request carries no path, so this is what keeps it from becoming a
+// way to make the edge pull arbitrary objects out of storage: a digest no
+// retained revision references is simply not there.
+func (w *Window) ResolveDigest(hash string) (Entry, *Manifest, bool) {
+	for _, m := range w.state.Load().retained {
+		if e, ok := m.LookupDigest(hash); ok {
+			return e, m, true
+		}
+	}
+	return Entry{}, nil, false
 }

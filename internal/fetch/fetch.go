@@ -281,8 +281,13 @@ func (c *Coalescer) download(parent context.Context, e *entry) {
 		return
 	}
 
+	// These are published under the lock, not just before closing ready. A
+	// requester whose own context died can call release before ready is ever
+	// closed, and release reads rf to decide whether to close it.
+	e.mu.Lock()
 	e.path = path
 	e.rf = rf
+	e.mu.Unlock()
 	close(e.ready)
 
 	c.inflight.Add(1)
