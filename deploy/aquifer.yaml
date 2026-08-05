@@ -1,0 +1,72 @@
+# Aquifer edge configuration.
+#
+# Every value below is the one an edge actually runs with; nothing here is a
+# fragment. Credentials are deliberately absent: pass them as
+# AQUIFER_S3_ACCESS_KEY and AQUIFER_S3_SECRET_KEY, or as the standard
+# AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY.
+
+listen: "0.0.0.0:8080"
+admin_listen: "127.0.0.1:8081"
+
+log:
+  format: json
+  level: info
+
+s3:
+  endpoint: http://minio:9000
+  bucket: aquifer
+  prefix: mirror
+  # Most non-AWS endpoints, including Swift's S3 layer, need path-style
+  # addressing.
+  path_style: true
+  # Plain HTTP is fine here because the endpoint is inside the private
+  # network. Use https:// in the endpoint otherwise.
+  insecure: true
+
+# How often each repo's ref is checked. The request carries If-None-Match, so
+# an unchanged ref costs one round trip and no transfer.
+poll_interval: 15s
+
+# How many revisions of each repo stay resolvable. Pool paths resolve against
+# all of them, which is what stops "apt update" on one edge and "apt install"
+# on another from 404ing during a switchover.
+window: 5
+
+prefetch_concurrency: 4
+
+cache:
+  dir: /var/cache/aquifer
+
+  # The LRU budget. Pinned entries and in-flight downloads are outside it.
+  max_size: 5GiB
+
+  # Refuse to start if the pinned set exceeds this. It is the guard against a
+  # pattern wide enough to fill the disk with data that never leaves.
+  pinned_max_size: 1GiB
+
+  # Headroom for in-flight downloads, outside max_size. Twenty concurrent
+  # 90 MiB packages are 1.8 GiB in flight.
+  temp_reserve: 3GiB
+
+  # Never evicted, always served locally. Metadata is 7 MiB across every
+  # publication, so pinning it is free and makes "apt update" never miss.
+  pinned:
+    - "**/dists/**"
+    - "dists/**"
+
+  # Fetched in the background after a revision switch, then managed by the LRU.
+  # Pinned patterns are implicitly prefetched; list additional ones here.
+  prefetch:
+    - "**/dists/**"
+    - "dists/**"
+
+# One entry per publication. prefix is the path clients request under; an empty
+# prefix serves that publication at the archive root, and the router tries the
+# longest prefix first so the root entry only catches what nothing else claims.
+repos:
+  - repo: debian/bookworm
+    prefix: debian/bookworm
+  - repo: debian/trixie
+    prefix: debian/trixie
+  - repo: ubuntu/noble
+    prefix: ubuntu/noble

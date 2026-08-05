@@ -69,3 +69,52 @@ notices-check: notices
 .PHONY: clean
 clean:
 	rm -rf dist coverage.out
+
+# --- container image ----------------------------------------------------------
+
+IMAGE       ?= ghcr.io/nledez/aquifer
+PLATFORMS   ?= linux/amd64,linux/arm64
+VCS_REF     := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
+# SOURCE_DATE_EPOCH keeps the build reproducible; override it to pin a date.
+SOURCE_DATE_EPOCH ?= $(shell git log -1 --pretty=%ct 2>/dev/null || echo 0)
+BUILD_DATE  := $(shell date -u -r $(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null \
+                || date -u -d @$(SOURCE_DATE_EPOCH) +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || echo unknown)
+
+# Multi-arch builds and attestations need a docker-container driver; the
+# default "docker" driver supports neither. "make buildx-setup" creates one.
+BUILDX_BUILDER ?= aquifer
+BUILDER_FLAG   := $(if $(BUILDX_BUILDER),--builder $(BUILDX_BUILDER),)
+
+DOCKER_BUILD_ARGS = \
+	--build-arg VERSION=$(VERSION) \
+	--build-arg VCS_REF=$(VCS_REF) \
+	--build-arg BUILD_DATE=$(BUILD_DATE)
+
+.PHONY: buildx-setup
+buildx-setup:
+	docker buildx inspect $(BUILDX_BUILDER) >/dev/null 2>&1 \
+		|| docker buildx create --name $(BUILDX_BUILDER) --driver docker-container --bootstrap
+
+# Builds for the host architecture and loads the result into the local daemon.
+.PHONY: image
+image: $(NOTICES)
+	docker buildx build $(DOCKER_BUILD_ARGS) \
+		--provenance=false --sbom=false \
+		-t $(IMAGE):$(VERSION) --load .
+
+# Builds both architectures with an SBOM and provenance attestations. Multi-arch
+# images cannot be loaded into the local daemon, so this pushes.
+.PHONY: image-push
+image-push: $(NOTICES) buildx-setup
+	docker buildx build $(BUILDER_FLAG) $(DOCKER_BUILD_ARGS) \
+		--platform=$(PLATFORMS) \
+		--sbom=true --provenance=mode=max \
+		-t $(IMAGE):$(VERSION) --push .
+
+# Builds both architectures without pushing, to check the Dockerfile.
+.PHONY: image-check
+image-check: $(NOTICES) buildx-setup
+	docker buildx build $(BUILDER_FLAG) $(DOCKER_BUILD_ARGS) \
+		--platform=$(PLATFORMS) \
+		--sbom=true --provenance=mode=max \
+		--output=type=cacheonly .
