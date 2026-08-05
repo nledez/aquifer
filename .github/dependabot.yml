@@ -1,0 +1,63 @@
+version: 2
+
+updates:
+  # The workflow pins every action to a commit SHA, so nothing here moves on
+  # its own when an action publishes a fix. Dependabot is what closes that
+  # gap: it rewrites the SHA and the trailing "# vX.Y.Z" comment together,
+  # which keeps the pin auditable instead of an opaque hash.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+    groups:
+      # One PR per week for the routine bumps. Major versions stay separate
+      # because they carry breaking changes worth reading (a Node runtime
+      # jump, a golangci-lint major) and should not ride along unnoticed.
+      actions:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+    groups:
+      # Direct dependencies are few and the test suite is the gate, so batching
+      # the routine bumps costs nothing. A major is an API break: it gets its
+      # own PR, and the `go mod tidy` check in CI proves go.sum stayed honest.
+      gomod:
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Both Dockerfile stages carry a literal tag plus a digest, which is what
+  # makes them visible here: an interpolated FROM tag is skipped outright.
+  # A builder-stage bump still has to stay in step with go.mod and
+  # .tool-versions, so read that PR rather than merging it on sight.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+
+  # The compose file is the operator-facing deployment: a pinned MinIO release
+  # and the published aquifer image. Releases bump the latter, so leave it to
+  # the release process rather than letting Dependabot race it.
+  - package-ecosystem: docker-compose
+    directory: /deploy
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: "build"
+    ignore:
+      - dependency-name: ghcr.io/nledez/aquifer

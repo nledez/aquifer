@@ -7,10 +7,15 @@
 # is nothing to gain here when the binary is static and the runtime image is
 # already 2 MiB.
 
-ARG GO_VERSION=1.26.5
-
 # --- build ---------------------------------------------------------------------
-FROM --platform=$BUILDPLATFORM golang:${GO_VERSION}-bookworm AS builder
+# Both base images carry a literal tag and a digest. The tag is what a human
+# reads; the digest is what actually gets pulled, so a build is reproducible
+# even after the tag moves. Dependabot parses these lines and bumps tag and
+# digest together — it skips a FROM whose tag comes from a build arg, which is
+# why the Go version is spelled out here rather than kept in an ARG.
+#
+# The Go version must match go.mod and .tool-versions.
+FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm@sha256:6c5605ab3a9a9fb3c4eafe5b3d63cdbf3881caf113262b67862547b54a9db599 AS builder
 
 WORKDIR /src
 
@@ -42,7 +47,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 RUN mkdir -p /out/cache && chown 65532:65532 /out/cache
 
 # --- runtime -------------------------------------------------------------------
-FROM gcr.io/distroless/static-debian12:nonroot
+# :nonroot is a floating tag — it moves whenever distroless rebuilds. The
+# digest is what pins the runtime; Dependabot refreshes it when the tag moves.
+FROM gcr.io/distroless/static-debian12:nonroot@sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35
 
 ARG VERSION=dev
 ARG VCS_REF=unknown
@@ -55,7 +62,8 @@ LABEL org.opencontainers.image.title="aquifer" \
       org.opencontainers.image.created="${BUILD_DATE}" \
       org.opencontainers.image.source="https://github.com/nledez/aquifer" \
       org.opencontainers.image.licenses="BSD-3-Clause" \
-      org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot"
+      org.opencontainers.image.base.name="gcr.io/distroless/static-debian12:nonroot" \
+      org.opencontainers.image.base.digest="sha256:f5b485ea962d9bd1186b2f6b3a061191539b905b82ec395de78cbfae51f20e35"
 
 COPY --from=builder /out/aquifer /aquifer
 COPY --from=builder --chown=65532:65532 /out/cache /var/cache/aquifer
