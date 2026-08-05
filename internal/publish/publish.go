@@ -232,6 +232,14 @@ func readIndices(root string, files []scannedFile) (map[string]knownFile, error)
 		}
 
 		for _, f := range rel.Files {
+			if isSuiteSelfReference(f.Path) {
+				// apt-ftparchive lists the suite's own Release in the checksum
+				// sections it is itself generating, so that entry is stale by
+				// construction: writing the digest into the file changes the
+				// file. apt ignores it, and so must we; the Release files are
+				// hashed directly like any other file no index covers.
+				continue
+			}
 			indexPath := path.Join(suiteDir, f.Path)
 			if err := record(known, indexPath, knownFile{
 				sha256: f.SHA256, size: f.Size, source: relName,
@@ -336,6 +344,24 @@ func poolIndexBases(rel *debian.Release) []string {
 	}
 	slices.Sort(bases)
 	return bases
+}
+
+// isSuiteSelfReference reports whether a Release checksum entry points at the
+// suite's own signature files.
+//
+// Only the top level counts: a per-component "main/binary-amd64/Release" is a
+// real, checkable index, while a bare "Release" can only ever be the file
+// listing itself.
+func isSuiteSelfReference(p string) bool {
+	if strings.Contains(p, "/") {
+		return false
+	}
+	switch p {
+	case "Release", "InRelease", "Release.gpg":
+		return true
+	default:
+		return false
+	}
 }
 
 func stripCompression(p string) string {

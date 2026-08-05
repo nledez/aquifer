@@ -118,3 +118,11 @@ image-check: $(NOTICES) buildx-setup
 		--platform=$(PLATFORMS) \
 		--sbom=true --provenance=mode=max \
 		--output=type=cacheonly .
+
+# The only test that proves the whole system works: a real signed Debian
+# repository, published, served by an edge, installed with a real apt, for
+# every configured suite and architecture.
+.PHONY: test-apt
+test-apt:
+	$(MAKE) image VERSION=apt-test IMAGE=aquifer
+	AQUIFER_IMAGE=aquifer:apt-test ./test/apt/run.sh

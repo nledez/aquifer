@@ -76,6 +76,23 @@ jobs:
             VERSION=${{ github.sha }}
             VCS_REF=${{ github.sha }}
 
+  apt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      # The only test that proves the whole system works: a real signed Debian
+      # repository, published, served by an edge, installed by a real apt, for
+      # every configured suite and architecture.
+      - name: apt integration test
+        run: make test-apt
+
   lint:
     runs-on: ubuntu-latest
     steps:

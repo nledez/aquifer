@@ -365,3 +365,60 @@ var errManifestRefused = errors.New("manifest upload refused")
 func (f *failingManifestStore) PutManifest(context.Context, string, string, io.Reader, int64) error {
 	return errManifestRefused
 }
+
+// apt-ftparchive lists the suite's own Release in the checksum sections it is
+// generating, with a size and digest that cannot match the finished file:
+// writing the digest into the file changes it. Real repositories are built
+// this way, apt ignores the entry, and refusing to publish over it would make
+// Aquifer unable to mirror an ordinary Debian archive.
+//
+// Found by the apt integration test, not by any unit test.
+func TestPublishIgnoresAReleaseThatListsItself(t *testing.T) {
+	t.Parallel()
+
+	p := newPublication(t)
+	p.addPackage("nginx", []byte("body"))
+	dir := p.write(t)
+
+	// Append a self-reference whose size and digest are deliberately wrong.
+	releasePath := filepath.Join(dir, "dists", "bookworm", "Release")
+	existing, err := os.ReadFile(releasePath)
+	if err != nil {
+		t.Fatalf("read Release: %v", err)
+	}
+	augmented := append(existing, []byte(" "+digest([]byte("stale"))+" 111 Release\n")...)
+	writeFile(t, releasePath, augmented)
+
+	store := blobstoretest.NewMem()
+	res := run(t, store, dir, "debian/bookworm", "debian/bookworm")
+
+	m := loadManifest(t, store, "debian/bookworm", res.Revision)
+	entry, ok := m.Lookup("debian/bookworm/dists/bookworm/Release")
+	if !ok {
+		t.Fatal("the Release file was not published")
+	}
+	// It is published with its real digest, computed from disk.
+	if entry.SHA256 != digest(augmented) || entry.Size != int64(len(augmented)) {
+		t.Fatalf("Release entry = %+v, want the digest of what is on disk", entry)
+	}
+}
+
+// A per-component Release is a real index and must still be checked.
+func TestPublishStillChecksAPerComponentRelease(t *testing.T) {
+	t.Parallel()
+
+	p := newPublication(t)
+	p.addPackage("nginx", []byte("body"))
+	dir := p.write(t)
+
+	releasePath := filepath.Join(dir, "dists", "bookworm", "Release")
+	existing, err := os.ReadFile(releasePath)
+	if err != nil {
+		t.Fatalf("read Release: %v", err)
+	}
+	augmented := append(existing,
+		[]byte(" "+digest([]byte("whatever"))+" 111 main/binary-amd64/Release\n")...)
+	writeFile(t, releasePath, augmented)
+
+	assertPublishFails(t, dir, "debian/bookworm")
+}
