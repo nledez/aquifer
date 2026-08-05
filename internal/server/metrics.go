@@ -12,6 +12,10 @@ const (
 	resultHit   = "hit"
 	resultMiss  = "miss"
 	resultError = "error"
+	// resultNotFound is a path no revision knows. It is neither a hit nor a
+	// miss, but leaving it uncounted made a misconfigured prefix produce
+	// silent 404 storms.
+	resultNotFound = "notfound"
 )
 
 // Class buckets a request by what kind of object it asked for.
@@ -50,7 +54,7 @@ func newMetrics(s *Server) *metrics {
 	// Pre-create the series so that a scrape before the first request still
 	// shows the breakdown rather than an empty result.
 	for _, class := range []string{classPinned, classPool} {
-		for _, result := range []string{resultHit, resultMiss, resultError} {
+		for _, result := range []string{resultHit, resultMiss, resultError, resultNotFound} {
 			m.requests.WithLabelValues(class, result)
 		}
 		m.duration.WithLabelValues(class)

@@ -38,8 +38,26 @@ type AllowAll struct{}
 // Authorize always allows.
 func (AllowAll) Authorize(*http.Request) bool { return true }
 
-// byHashSegment marks a path that addresses an index by its own digest.
-const byHashSegment = "/by-hash/SHA256/"
+// byHashDir marks a path that addresses an index by its own digest. The
+// algorithm follows it as a path segment.
+const byHashDir = "/by-hash/"
+
+// servedByHashAlgorithm is the only digest Aquifer addresses by, and so the
+// only one it can resolve a by-hash path under.
+const servedByHashAlgorithm = "SHA256"
+
+// Reasons a request resolved to nothing. They are distinct because they are
+// distinct problems: a bad prefix in the configuration, a client working from
+// an index older than the retained window, or apt asking for a digest under an
+// algorithm this edge does not serve.
+const (
+	reasonNoRoute          = "no_route"
+	reasonNotInRevision    = "not_in_revision"
+	reasonByHashAlgorithm  = "by_hash_unsupported_algorithm"
+	reasonByHashBadDigest  = "by_hash_malformed_digest"
+	reasonByHashUnknown    = "by_hash_unknown_digest"
+	reasonByHashOutsideDir = "by_hash_outside_dists"
+)
 
 // Handler serves apt clients.
 func (s *Server) Handler() http.Handler {
@@ -109,10 +127,16 @@ func (s *Server) serveBlob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, ok := s.resolve(servingPath)
-	if !ok {
-		// Nothing is recorded for a path no revision knows: it is not a cache
-		// miss, it is a request for something that does not exist.
+	res, reason := s.resolve(servingPath)
+	if reason != "" {
+		// A 404 is neither a hit nor a miss, but it still gets counted and
+		// logged. The reason is what turns "some requests 404" into a
+		// diagnosis; see docs/operations.md.
+		s.log.Warn("request resolved to nothing",
+			"path", servingPath, "reason", reason, "method", r.Method,
+			"remote", clientAddr(r), "user_agent", r.UserAgent())
+		s.metrics.requests.WithLabelValues(res.class, resultNotFound).Inc()
+		s.metrics.duration.WithLabelValues(res.class).Observe(time.Since(started).Seconds())
 		http.NotFound(w, r)
 		return
 	}
@@ -122,42 +146,48 @@ func (s *Server) serveBlob(w http.ResponseWriter, r *http.Request) {
 	s.metrics.duration.WithLabelValues(res.class).Observe(time.Since(started).Seconds())
 }
 
-// resolve turns a serving path into the blob behind it.
-func (s *Server) resolve(servingPath string) (resolved, bool) {
-	repo, ok := s.router.Match(servingPath)
-	if !ok {
-		return resolved{}, false
-	}
-	rs, ok := s.repos[repo]
-	if !ok {
-		return resolved{}, false
-	}
-
-	entry, m, ok := s.resolveEntry(rs, servingPath)
-	if !ok {
-		return resolved{}, false
-	}
-
+// resolve turns a serving path into the blob behind it, or reports why it
+// could not. An empty reason means it resolved.
+func (s *Server) resolve(servingPath string) (resolved, string) {
 	// The metric's classes are about what an operator reasons over, not about
 	// the cache policy: metadata versus packages. A path is metadata either
-	// because the operator pinned it or because it lives under dists/.
+	// because the operator pinned it or because it lives under dists/. It is
+	// computed from the path alone, so an unresolved request is still
+	// classified.
 	class := classPool
 	if s.selector.Classify(servingPath) == cache.ClassPinned || manifest.IsMetadata(servingPath) {
 		class = classPinned
 	}
-	return resolved{
-		entry:    entry,
-		modTime:  m.CreatedAt,
-		class:    class,
-		filename: path.Base(servingPath),
-	}, true
+	out := resolved{class: class, filename: path.Base(servingPath)}
+
+	repo, ok := s.router.Match(servingPath)
+	if !ok {
+		return out, reasonNoRoute
+	}
+	rs, ok := s.repos[repo]
+	if !ok {
+		return out, reasonNoRoute
+	}
+
+	entry, m, reason := s.resolveEntry(rs, servingPath)
+	if reason != "" {
+		return out, reason
+	}
+
+	out.entry = entry
+	out.modTime = m.CreatedAt
+	return out, ""
 }
 
 // resolveEntry handles both ordinary paths and by-hash paths.
-func (s *Server) resolveEntry(rs *repoState, servingPath string) (manifest.Entry, *manifest.Manifest, bool) {
-	idx := strings.Index(servingPath, byHashSegment)
+func (s *Server) resolveEntry(rs *repoState, servingPath string) (manifest.Entry, *manifest.Manifest, string) {
+	idx := strings.Index(servingPath, byHashDir)
 	if idx < 0 {
-		return rs.window.Resolve(servingPath)
+		entry, m, ok := rs.window.Resolve(servingPath)
+		if !ok {
+			return manifest.Entry{}, nil, reasonNotInRevision
+		}
+		return entry, m, ""
 	}
 
 	// SPEC section 5: a by-hash path resolves straight from the digest in the
@@ -178,14 +208,29 @@ func (s *Server) resolveEntry(rs *repoState, servingPath string) (manifest.Entry
 	// -acquire-by-hash, revisit this: the Release already carries the SHA512 of
 	// every index, so publish could emit the by-hash paths as ordinary manifest
 	// entries pointing at the same blob, and this special case could go away.
-	digest := servingPath[idx+len(byHashSegment):]
-	if strings.Contains(digest, "/") || !isSHA256Hex(digest) {
-		return manifest.Entry{}, nil, false
+	algorithm, digest, ok := strings.Cut(servingPath[idx+len(byHashDir):], "/")
+	if !ok || strings.Contains(digest, "/") {
+		return manifest.Entry{}, nil, reasonByHashBadDigest
 	}
 	if !manifest.IsMetadata(servingPath[:idx+1]) {
-		return manifest.Entry{}, nil, false
+		return manifest.Entry{}, nil, reasonByHashOutsideDir
 	}
-	return rs.window.ResolveDigest(digest)
+	if algorithm != servedByHashAlgorithm {
+		// apt asks for the strongest digest the Release declares, which both
+		// apt-ftparchive and aptly make SHA512. Naming it here is what tells an
+		// operator that publishing changed, rather than leaving it to look like
+		// any other missing path.
+		return manifest.Entry{}, nil, reasonByHashAlgorithm
+	}
+	if !isSHA256Hex(digest) {
+		return manifest.Entry{}, nil, reasonByHashBadDigest
+	}
+
+	entry, m, found := rs.window.ResolveDigest(digest)
+	if !found {
+		return manifest.Entry{}, nil, reasonByHashUnknown
+	}
+	return entry, m, ""
 }
 
 // write answers the request and reports how it was served.
@@ -323,6 +368,21 @@ func contentTypeFor(filename string) string {
 		return "text/plain; charset=utf-8"
 	}
 	return "application/octet-stream"
+}
+
+// clientAddr prefers what the reverse proxy says, since the edge only ever
+// sees the proxy's address otherwise.
+func clientAddr(r *http.Request) string {
+	if v := r.Header.Get("X-Real-IP"); v != "" {
+		return v
+	}
+	if v := r.Header.Get("X-Forwarded-For"); v != "" {
+		if first, _, ok := strings.Cut(v, ","); ok {
+			return strings.TrimSpace(first)
+		}
+		return strings.TrimSpace(v)
+	}
+	return r.RemoteAddr
 }
 
 func isSHA256Hex(s string) bool {

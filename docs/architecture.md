@@ -145,10 +145,11 @@ the others.
 URL. The digest is still checked against the retained revisions, so the
 endpoint cannot be used to make an edge pull arbitrary objects out of storage.
 
-Only SHA256 is served. apt asks for the strongest digest the `Release`
-declares, and both `apt-ftparchive` and aptly emit SHA512, so an apt configured
-for by-hash gets a 404 and falls back to the plain path — correctly, at the
-cost of one wasted round trip per index. That gap is deliberate: the access
+Only SHA256 is served, and every by-hash request that resolves to nothing is
+counted and logged with a reason naming why. apt asks for the strongest digest
+the `Release` declares, and both `apt-ftparchive` and aptly emit SHA512, so an
+apt configured for by-hash gets a 404 and falls back to the plain path —
+correctly, at the cost of one wasted round trip per index. That gap is deliberate: the access
 logs of the mirror this replaces contain no by-hash request at all, so serving
 SHA512 would mean carrying a second digest for every index and roughly 1200
 extra manifest entries per revision for a path nobody takes. See

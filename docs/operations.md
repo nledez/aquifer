@@ -119,7 +119,7 @@ scrape_configs:
 
 | Metric | What it tells you |
 |---|---|
-| `aquifer_cache_requests_total{class,result}` | hit ratio, **split by class** |
+| `aquifer_cache_requests_total{class,result}` | hit ratio and 404 rate, **split by class** |
 | `aquifer_fetch_coalesced_readers_total` | downloads saved by coalescing |
 | `aquifer_fetch_inflight` | downloads running now |
 | `aquifer_cache_bytes`, `aquifer_cache_objects` | the evictable segment |
@@ -144,6 +144,46 @@ sum by (class) (rate(aquifer_cache_requests_total{result="hit"}[1h]))
   `pinned` patterns are missing something.
 - `class="pool"` is expected to be well under 100% with a 5 GiB budget against
   an 8 GiB working set. Read it against `aquifer_cache_evictions_total`.
+
+`result="notfound"` counts requests that resolved to nothing. In steady state
+it should be flat at zero: apt only asks for what the indices declare. Any rate
+at all means one of a handful of specific things, and the logs say which.
+
+```promql
+rate(aquifer_cache_requests_total{result="notfound"}[15m])
+```
+
+Every 404 is logged at `WARN`, one line, with the reason:
+
+```json
+{"level":"WARN","msg":"request resolved to nothing",
+ "path":"debian/bookworm/pool/main/z/zzz/absent.deb","reason":"not_in_revision",
+ "method":"GET","remote":"10.0.0.42","user_agent":"Debian APT-HTTP/1.3 (2.6.1)"}
+```
+
+The path is the serving path as manifests store it, without a leading slash, so
+it greps straight against one:
+
+```sh
+zstdcat manifest.tsv.zst | grep 'pool/main/z/zzz/absent.deb'
+```
+
+| `reason` | What it means | What to do |
+|---|---|---|
+| `no_route` | no configured `prefix` matches | a `repos` entry is missing or misspelled; compare with what clients request |
+| `not_in_revision` | routed, but no retained revision holds the path | a client is working from an index older than `window`, or the file genuinely never existed |
+| `by_hash_unsupported_algorithm` | apt asked for a digest under SHA512 | see [below](#if-you-ever-enable-acquire-by-hash); acquisition still succeeds via the plain path |
+| `by_hash_unknown_digest` | a valid SHA256 no retained revision references | usually a very stale client; also what a probe would produce |
+| `by_hash_malformed_digest` | the digest in the URL is not a digest | a broken client or a scanner |
+| `by_hash_outside_dists` | a by-hash path outside `dists/` | not something apt produces |
+
+`remote` prefers `X-Real-IP`, then the first entry of `X-Forwarded-For`, then
+the peer address, so it is the client rather than the reverse proxy — provided
+the proxy sets those headers, as both deployment guides do.
+
+A steady stream of `not_in_revision` after a publication is the signal to raise
+`window` on the edges and `--keep` on the GC: clients are being cut off before
+they finish installing.
 
 ### Alerts worth having
 
@@ -180,6 +220,14 @@ groups:
         for: 10m
         annotations:
           summary: "The edge is failing to serve requests"
+
+      # apt only asks for what the indices declare, so a sustained 404 rate is
+      # a configuration or window problem. The logs carry the reason.
+      - alert: AquiferNotFound
+        expr: rate(aquifer_cache_requests_total{result="notfound"}[15m]) > 0.05
+        for: 15m
+        annotations:
+          summary: "{{ $labels.class }} requests are 404ing; grep the logs for \"resolved to nothing\""
 ```
 
 `aquifer_release_valid_until_seconds` reports `+Inf` for a suite whose
@@ -321,13 +369,16 @@ ordinary manifest entries pointing at the same blob. That costs roughly 1200
 extra manifest entries per revision and lets the edge's by-hash special case go
 away entirely.
 
-You will not see this in the metrics as it stands: a path that does not resolve
-returns 404 without being counted. Check for it directly:
+You will see it, because every 404 is counted and logged with its reason:
 
 ```sh
-curl -s -o /dev/null -w '%{http_code}\n' \
-  "http://edge-1:8080/debian/bookworm/dists/bookworm/main/binary-amd64/by-hash/SHA512/$(sha512sum Packages | cut -d' ' -f1)"
+curl -s http://edge-1:8081/metrics | grep 'result="notfound"'
+journalctl -u aquifer | grep by_hash_unsupported_algorithm | tail
 ```
+
+If that reason dominates the 404s, apt is asking for SHA512 by-hash on every
+`apt update` and taking the fallback each time. That is the moment to make
+publish emit the by-hash paths.
 
 ## Verification
 

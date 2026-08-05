@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,6 +86,26 @@ type harness struct {
 	client *http.Client
 	url    string
 	admin  *httptest.Server
+	logs   *logCapture
+}
+
+// logCapture collects the server's structured output so tests can assert on
+// what an operator would actually see.
+type logCapture struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (c *logCapture) Write(p []byte) (int, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.buf.Write(p)
+}
+
+func (c *logCapture) String() string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.buf.String()
 }
 
 type harnessOptions struct {
@@ -134,6 +155,7 @@ func newHarness(t *testing.T, store *countingStore, opts harnessOptions) *harnes
 		t.Fatalf("cache.NewSelector: %v", err)
 	}
 
+	logs := &logCapture{}
 	srv, err := server.New(server.Config{
 		Store:        store,
 		Cache:        c,
@@ -142,6 +164,7 @@ func newHarness(t *testing.T, store *countingStore, opts harnessOptions) *harnes
 		Routes:       opts.routes,
 		PollInterval: opts.pollInterval,
 		WindowSize:   3,
+		Logger:       slog.New(slog.NewJSONHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 	})
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
@@ -175,6 +198,7 @@ func newHarness(t *testing.T, store *countingStore, opts harnessOptions) *harnes
 		client: front.Client(),
 		url:    front.URL,
 		admin:  admin,
+		logs:   logs,
 	}
 }
 
@@ -778,5 +802,139 @@ func TestAStreamedMissDeliversEveryByte(t *testing.T) {
 	}
 	if got := bodyOf(t, resp); !bytes.Equal(got, payload) {
 		t.Fatalf("body is %d bytes, want %d", len(got), len(payload))
+	}
+}
+
+// --- unresolved requests ------------------------------------------------------
+
+// metricValue extracts one series' value from the scrape.
+func (h *harness) metricValue(t *testing.T, series string) float64 {
+	t.Helper()
+
+	resp, err := h.admin.Client().Get(h.admin.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	for line := range strings.SplitSeq(string(bodyOf(t, resp)), "\n") {
+		name, value, ok := strings.Cut(line, " ")
+		if !ok || name != series {
+			continue
+		}
+		var f float64
+		if _, err := fmt.Sscanf(value, "%g", &f); err != nil {
+			t.Fatalf("parsing %q: %v", line, err)
+		}
+		return f
+	}
+	t.Fatalf("series %s not found in the scrape", series)
+	return 0
+}
+
+// A path nothing resolves is neither a hit nor a miss, but it must still be
+// counted. A misconfigured prefix otherwise produces silent 404 storms.
+func TestUnresolvedRequestsAreCountedAndLogged(t *testing.T) {
+	t.Parallel()
+
+	store := &countingStore{Store: blobstoretest.NewMem()}
+	publishRevision(t, store, "debian/bookworm", "debian/bookworm", defaultFiles())
+	h := newHarness(t, store, harnessOptions{routes: defaultRoutes()})
+
+	cases := []struct {
+		name   string
+		path   string
+		class  string
+		reason string
+	}{
+		{
+			name:   "no route matches the path",
+			path:   "/ubuntu/noble/pool/main/x/x.deb",
+			class:  "pool",
+			reason: "no_route",
+		},
+		{
+			name:   "routed but absent from every retained revision",
+			path:   "/debian/bookworm/pool/main/z/zzz/absent.deb",
+			class:  "pool",
+			reason: "not_in_revision",
+		},
+		{
+			name:   "metadata absent from the current revision",
+			path:   "/debian/bookworm/dists/bookworm/Absent",
+			class:  "pinned",
+			reason: "not_in_revision",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			before := h.metricValue(t, fmt.Sprintf(
+				`aquifer_cache_requests_total{class="%s",result="notfound"}`, tc.class))
+
+			resp := h.do(t, http.MethodGet, tc.path, nil)
+			_ = bodyOf(t, resp)
+			if resp.StatusCode != http.StatusNotFound {
+				t.Fatalf("status = %d, want 404", resp.StatusCode)
+			}
+
+			after := h.metricValue(t, fmt.Sprintf(
+				`aquifer_cache_requests_total{class="%s",result="notfound"}`, tc.class))
+			if after != before+1 {
+				t.Fatalf("notfound counter went %v -> %v, want +1", before, after)
+			}
+
+			logs := h.logs.String()
+			if !strings.Contains(logs, `"reason":"`+tc.reason+`"`) {
+				t.Fatalf("no log line names reason %q:\n%s", tc.reason, logs)
+			}
+			// The log carries the serving path as manifests store it, without
+			// the leading slash, so it greps against a manifest directly.
+			if !strings.Contains(logs, strings.TrimPrefix(tc.path, "/")) {
+				t.Fatalf("no log line names the path %q", tc.path)
+			}
+		})
+	}
+}
+
+// apt asks for the strongest digest the Release declares, which is SHA512.
+// That 404 has to say so, rather than looking like any other missing path:
+// it is the signal that publishing changed.
+func TestByHashUnderAnUnsupportedAlgorithmSaysSo(t *testing.T) {
+	t.Parallel()
+
+	store := &countingStore{Store: blobstoretest.NewMem()}
+	files := defaultFiles()
+	publishRevision(t, store, "debian/bookworm", "debian/bookworm", files)
+	h := newHarness(t, store, harnessOptions{routes: defaultRoutes()})
+
+	sha512ish := strings.Repeat("ab", 64)
+	resp := h.do(t, http.MethodGet,
+		"/debian/bookworm/dists/bookworm/main/binary-amd64/by-hash/SHA512/"+sha512ish, nil)
+	_ = bodyOf(t, resp)
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if logs := h.logs.String(); !strings.Contains(logs, `"reason":"by_hash_unsupported_algorithm"`) {
+		t.Fatalf("the unsupported algorithm was not named:\n%s", logs)
+	}
+}
+
+func TestByHashWithAnUnknownDigestSaysSo(t *testing.T) {
+	t.Parallel()
+
+	store := &countingStore{Store: blobstoretest.NewMem()}
+	publishRevision(t, store, "debian/bookworm", "debian/bookworm", defaultFiles())
+	h := newHarness(t, store, harnessOptions{routes: defaultRoutes()})
+
+	unknown := sha256Of([]byte("never published"))
+	resp := h.do(t, http.MethodGet,
+		"/debian/bookworm/dists/bookworm/main/binary-amd64/by-hash/SHA256/"+unknown, nil)
+	_ = bodyOf(t, resp)
+
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+	if logs := h.logs.String(); !strings.Contains(logs, `"reason":"by_hash_unknown_digest"`) {
+		t.Fatalf("the unknown digest was not named:\n%s", logs)
 	}
 }
