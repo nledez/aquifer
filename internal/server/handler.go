@@ -226,14 +226,35 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, res resolved) str
 
 	header.Set("Content-Length", strconv.FormatInt(res.entry.Size, 10))
 	w.WriteHeader(http.StatusOK)
-	if _, err := io.Copy(w, rc); err != nil {
+
+	// CopyN, not Copy, and the size is what makes it correct.
+	//
+	// Copy performs one more Read after the last byte, to see EOF. At that
+	// moment the leader is typically still verifying the digest and admitting
+	// the blob, so the entry is not done and the reader blocks; meanwhile the
+	// client, which knows the length, has already closed. That final read then
+	// fails with the request's cancellation and a perfectly delivered response
+	// looks like an error. CopyN stops at the declared length and never issues
+	// that read.
+	written, err := io.CopyN(w, rc, res.entry.Size)
+	switch {
+	case err == nil:
+		return resultMiss
+	case r.Context().Err() != nil:
+		// The client hung up part-way. Nothing failed on this side, and
+		// counting it as an error would make the metric alert on apt being
+		// interrupted.
+		s.log.Debug("client left before the body was complete",
+			"path", r.URL.Path, "written", written, "size", res.entry.Size)
+		return resultMiss
+	default:
 		// The status line is already out; all that is left is to stop and let
 		// the client see a short body.
 		s.log.Warn("streaming a blob failed part-way",
-			"path", r.URL.Path, "hash", res.entry.SHA256, "error", err)
+			"path", r.URL.Path, "hash", res.entry.SHA256,
+			"written", written, "size", res.entry.Size, "error", err)
 		return resultError
 	}
-	return resultMiss
 }
 
 func (s *Server) fail(w http.ResponseWriter, r *http.Request, res resolved, err error) string {

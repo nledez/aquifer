@@ -93,6 +93,11 @@ type Coalescer struct {
 	mu      sync.Mutex
 	entries map[string]*entry
 
+	// downloads tracks the leader goroutines so that a shutdown can wait for
+	// them. They run detached from any request context by design, so nothing
+	// else would ever join them.
+	downloads sync.WaitGroup
+
 	inflight  atomic.Int64
 	coalesced atomic.Int64
 }
@@ -143,6 +148,28 @@ func (c *Coalescer) Inflight() int64 { return c.inflight.Load() }
 // CoalescedReaders reports how many requesters were served by an already
 // running download. This is the number that proves coalescing works.
 func (c *Coalescer) CoalescedReaders() int64 { return c.coalesced.Load() }
+
+// Wait blocks until every in-flight download has finished, or ctx expires.
+//
+// Downloads deliberately outlive the requests that started them, so a shutdown
+// that simply stopped accepting connections would leave goroutines writing
+// into a cache directory nobody owns any more. Waiting makes the wind-down
+// ordered; the leftover temp files a hard kill leaves behind are cleared at
+// the next startup either way.
+func (c *Coalescer) Wait(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		c.downloads.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 // Fetch returns the blob body, starting or joining a download as needed. The
 // returned reader streams: it may block while the leader catches up.
@@ -195,6 +222,7 @@ func (c *Coalescer) join(ctx context.Context, hash string, size int64, wait bool
 		// The leader's download must outlive its own request: the first client
 		// to hit Ctrl-C must not cancel the download the other clients are
 		// following. Keep the request's values, drop its cancellation.
+		c.downloads.Add(1)
 		go c.download(context.WithoutCancel(ctx), e)
 	} else {
 		c.coalesced.Add(1)
@@ -252,6 +280,7 @@ func (c *Coalescer) unregister(e *entry) {
 func (c *Coalescer) download(parent context.Context, e *entry) {
 	ctx, cancel := context.WithTimeout(parent, c.timeout)
 	defer cancel()
+	defer c.downloads.Done()
 	defer e.release()
 
 	// Another download may have admitted this blob between our caller's cache

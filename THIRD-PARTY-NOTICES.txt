@@ -27,7 +27,7 @@ Modules:
   - github.com/rs/xid v1.6.0
   - github.com/tinylib/msgp v1.6.1
   - github.com/zeebo/xxh3 v1.1.0
-  - go.yaml.in/yaml/v3 v3.0.4
+  - go.yaml.in/yaml/v3 v3.0.5
   - golang.org/x/crypto v0.54.0
   - golang.org/x/net v0.57.0
   - golang.org/x/sys v0.47.0
@@ -2111,7 +2111,7 @@ ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-go.yaml.in/yaml/v3 v3.0.4 -- LICENSE
+go.yaml.in/yaml/v3 v3.0.5 -- LICENSE
 ==============================================================================
 
 
@@ -2166,7 +2166,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 
 ==============================================================================
-go.yaml.in/yaml/v3 v3.0.4 -- NOTICE
+go.yaml.in/yaml/v3 v3.0.5 -- NOTICE
 ==============================================================================
 
 Copyright 2011-2016 Canonical Ltd.

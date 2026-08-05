@@ -73,3 +73,6 @@ func firstEnv(names ...string) string {
 	}
 	return ""
 }
+
+// envLookup is the environment as the configuration layers see it.
+func envLookup(name string) string { return os.Getenv(name) }

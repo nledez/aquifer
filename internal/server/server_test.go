@@ -152,7 +152,16 @@ func newHarness(t *testing.T, store *countingStore, opts harnessOptions) *harnes
 	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = srv.Close() })
+	t.Cleanup(func() {
+		_ = srv.Close()
+		// Downloads outlive the requests that started them, so the cache
+		// directory is only safe to remove once they have drained.
+		waitCtx, waitCancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer waitCancel()
+		if err := coalescer.Wait(waitCtx); err != nil {
+			t.Errorf("in-flight downloads did not drain: %v", err)
+		}
+	})
 
 	front := httptest.NewServer(srv.Handler())
 	t.Cleanup(front.Close)
@@ -712,5 +721,62 @@ func TestOnlyGetAndHeadAreAllowed(t *testing.T) {
 		if resp.StatusCode != http.StatusMethodNotAllowed {
 			t.Fatalf("%s: status = %d, want 405", method, resp.StatusCode)
 		}
+	}
+}
+
+// A successful download must be counted as a miss, not an error.
+//
+// Copying with io.Copy performed one read past the last byte; the leader was
+// still verifying and admitting the blob at that point, so the reader blocked
+// while the client, which knows the length, had already closed. The resulting
+// cancellation made every successful cache miss look like a failure, which is
+// the most common path there is.
+func TestASuccessfulMissIsNotCountedAsAnError(t *testing.T) {
+	t.Parallel()
+
+	store := &countingStore{Store: blobstoretest.NewMem()}
+	files := defaultFiles()
+	payload := bytes.Repeat([]byte("package payload "), 8192)
+	files["pool/main/b/big/big_1.0_amd64.deb"] = payload
+	publishRevision(t, store, "debian/bookworm", "debian/bookworm", files)
+	h := newHarness(t, store, harnessOptions{routes: defaultRoutes()})
+
+	resp := h.do(t, http.MethodGet, "/debian/bookworm/pool/main/b/big/big_1.0_amd64.deb", nil)
+	if got := bodyOf(t, resp); !bytes.Equal(got, payload) {
+		t.Fatalf("body is %d bytes, want %d", len(got), len(payload))
+	}
+
+	metrics, err := h.admin.Client().Get(h.admin.URL + "/metrics")
+	if err != nil {
+		t.Fatalf("metrics: %v", err)
+	}
+	body := string(bodyOf(t, metrics))
+
+	if !strings.Contains(body, `aquifer_cache_requests_total{class="pool",result="miss"} 1`) {
+		t.Fatalf("the fetch was not counted as a miss:\n%s", body)
+	}
+	if !strings.Contains(body, `aquifer_cache_requests_total{class="pool",result="error"} 0`) {
+		t.Fatalf("a successful fetch was counted as an error:\n%s", body)
+	}
+}
+
+// Serving must not depend on the blob arriving in one read. A source that
+// dribbles bytes out exercises the same path a slow object store does.
+func TestAStreamedMissDeliversEveryByte(t *testing.T) {
+	t.Parallel()
+
+	store := &countingStore{Store: blobstoretest.NewMem()}
+	files := defaultFiles()
+	payload := bytes.Repeat([]byte("0123456789abcdef"), 16384) // 256 KiB
+	files["pool/main/b/big/big_1.0_amd64.deb"] = payload
+	publishRevision(t, store, "debian/bookworm", "debian/bookworm", files)
+	h := newHarness(t, store, harnessOptions{routes: defaultRoutes()})
+
+	resp := h.do(t, http.MethodGet, "/debian/bookworm/pool/main/b/big/big_1.0_amd64.deb", nil)
+	if resp.ContentLength != int64(len(payload)) {
+		t.Fatalf("Content-Length = %d, want %d", resp.ContentLength, len(payload))
+	}
+	if got := bodyOf(t, resp); !bytes.Equal(got, payload) {
+		t.Fatalf("body is %d bytes, want %d", len(got), len(payload))
 	}
 }

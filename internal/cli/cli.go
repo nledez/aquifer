@@ -41,9 +41,10 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return runPublish(ctx, args[1:], stdout, stderr)
 	case "gc":
 		return runGC(ctx, args[1:], stdout, stderr)
-	case "serve", "ping":
-		fmt.Fprintf(stderr, "aquifer: %s is not implemented yet\n", args[0])
-		return 2
+	case "serve":
+		return runServe(ctx, args[1:], stdout, stderr)
+	case "ping":
+		return runPing(ctx, args[1:], stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "aquifer: unknown command %q\n\n%s", args[0], usage)
 		return 2
