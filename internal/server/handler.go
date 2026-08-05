@@ -164,6 +164,20 @@ func (s *Server) resolveEntry(rs *repoState, servingPath string) (manifest.Entry
 	// URL. It is still checked against the retained revisions, so that the
 	// endpoint cannot be used to make the edge pull arbitrary objects out of
 	// object storage.
+	//
+	// Only SHA256 is served, which is what the spec asks for and all that
+	// Aquifer addresses by. apt, however, asks for the strongest digest the
+	// Release declares, and both apt-ftparchive and aptly emit SHA512, so an
+	// apt configured for by-hash gets a 404 here and falls back to the plain
+	// path - correctly, but at the cost of one wasted round trip per index.
+	//
+	// That gap is deliberate: the access logs of the mirror this replaces show
+	// no by-hash request at all, so serving SHA512 would mean carrying a second
+	// digest for every index, and roughly 1200 extra manifest entries per
+	// revision, for a path nobody takes. Should aptly ever be published with
+	// -acquire-by-hash, revisit this: the Release already carries the SHA512 of
+	// every index, so publish could emit the by-hash paths as ordinary manifest
+	// entries pointing at the same blob, and this special case could go away.
 	digest := servingPath[idx+len(byHashSegment):]
 	if strings.Contains(digest, "/") || !isSHA256Hex(digest) {
 		return manifest.Entry{}, nil, false
