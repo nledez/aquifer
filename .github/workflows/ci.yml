@@ -40,6 +40,21 @@ jobs:
       - name: Verify third-party notices are up to date
         run: make notices-check
 
+  integration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Exercises the blobstore contract against a real S3 implementation.
+      # The in-memory double cannot tell us whether conditional GETs,
+      # path-style addressing or listing pagination actually work.
+      - name: Integration tests against MinIO
+        run: make test-integration
+
   lint:
     runs-on: ubuntu-latest
     steps:

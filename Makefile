@@ -27,6 +27,12 @@ race:
 stress:
 	go test -race -count=20 ./internal/fetch/...
 
+# Runs the blobstore contract against a real MinIO in Docker. Set
+# AQUIFER_TEST_S3_ENDPOINT to point at an existing store instead.
+.PHONY: test-integration
+test-integration:
+	go test -tags=integration -count=1 -timeout=15m ./...
+
 .PHONY: cover
 cover:
 	go test -race -coverprofile=coverage.out ./...
