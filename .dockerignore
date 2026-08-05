@@ -1,0 +1,13 @@
+# Ignore everything, then allow only what the build needs.
+*
+
+!go.mod
+!go.sum
+!cmd/
+!internal/
+!LICENSE
+!THIRD-PARTY-NOTICES.txt
+
+# Re-exclude test noise that slipped in through the allow list.
+**/*_test.go
+**/testdata/

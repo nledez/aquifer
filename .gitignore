@@ -1,0 +1,15 @@
+# Build output
+/dist/
+/aquifer
+
+# Test artifacts
+*.test
+*.out
+/coverage.*
+
+# Local development
+/.env
+/testdata/tmp/
+
+# OS noise
+.DS_Store

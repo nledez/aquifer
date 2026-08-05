@@ -1,0 +1,57 @@
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - contextcheck
+    - copyloopvar
+    - err113
+    - errorlint
+    - gocritic
+    - misspell
+    - nilerr
+    - noctx
+    - perfsprint
+    - revive
+    - unconvert
+    - unparam
+    - usestdlibvars
+    - wastedassign
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    revive:
+      rules:
+        - name: exported
+        - name: context-as-argument
+        - name: error-strings
+        - name: indent-error-flow
+        - name: var-naming
+
+  exclusions:
+    rules:
+      # Test helpers legitimately build ad-hoc errors and skip some checks.
+      - path: _test\.go$
+        linters:
+          - err113
+          - errcheck
+          - unparam
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/nledez/aquifer
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
