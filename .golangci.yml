@@ -6,7 +6,11 @@ linters:
     - bodyclose
     - contextcheck
     - copyloopvar
-    - err113
+    # err113 is deliberately absent. An error gets a package-level sentinel
+    # when a caller matches it - blobstore.ErrNotFound, fetch.ErrChecksumMismatch,
+    # manifest.ErrUnsupportedVersion - and stays inline when it only ever
+    # reaches a human. err113 rejects that second case wholesale, which would
+    # mean seventy exported names nobody compares against.
     - errorlint
     - gocritic
     - misspell
@@ -37,9 +41,12 @@ linters:
   exclusions:
     rules:
       # Test helpers legitimately build ad-hoc errors and skip some checks.
+      # bodyclose is here for a different reason: the harness closes every
+      # response body through t.Cleanup, and the linter cannot see through
+      # that indirection to the call sites.
       - path: _test\.go$
         linters:
-          - err113
+          - bodyclose
           - errcheck
           - unparam
 
