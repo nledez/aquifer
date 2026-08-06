@@ -29,13 +29,16 @@ jobs:
       - name: Vet
         run: go vet ./...
 
+      # Through the Makefile, which is where the race detector's cgo
+      # requirement is dealt with: the CGO_ENABLED=0 above would otherwise
+      # make the Go toolchain refuse -race.
       - name: Test with race detector
-        run: go test -race -count=1 ./...
+        run: make race
 
       # The download coalescer is the critical section of the whole project.
       # Repeat it to shake out scheduling-dependent races.
       - name: Stress the coalescer
-        run: go test -race -count=20 ./internal/fetch/...
+        run: make stress
 
       - name: Verify third-party notices are up to date
         run: make notices-check

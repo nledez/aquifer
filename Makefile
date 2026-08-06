@@ -18,14 +18,18 @@ build:
 test:
 	go test ./...
 
+# CGO_ENABLED is 0 for this whole file because the shipped binary is static.
+# The race detector is the exception: it is built on TSAN, which is C, so on
+# Linux the toolchain refuses -race outright without cgo. Every -race target
+# below therefore re-enables it for that command only.
 .PHONY: race
 race:
-	go test -race -count=1 ./...
+	CGO_ENABLED=1 go test -race -count=1 ./...
 
 # The coalescer is the heart of the project; hammer it harder than the rest.
 .PHONY: stress
 stress:
-	go test -race -count=20 ./internal/fetch/...
+	CGO_ENABLED=1 go test -race -count=20 ./internal/fetch/...
 
 # Runs the blobstore contract against a real MinIO in Docker. Set
 # AQUIFER_TEST_S3_ENDPOINT to point at an existing store instead.
@@ -35,7 +39,7 @@ test-integration:
 
 .PHONY: cover
 cover:
-	go test -race -coverprofile=coverage.out ./...
+	CGO_ENABLED=1 go test -race -coverprofile=coverage.out ./...
 	go tool cover -func=coverage.out | tail -1
 
 .PHONY: vet
