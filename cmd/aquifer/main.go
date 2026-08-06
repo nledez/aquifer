@@ -16,7 +16,9 @@ func main() {
 	// A publication or a GC run can take minutes. Cancelling on a signal lets
 	// it stop between operations rather than being killed mid-upload.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
+	code := cli.Main(ctx, os.Args[1:], os.Stdout, os.Stderr)
 
-	os.Exit(cli.Main(ctx, os.Args[1:], os.Stdout, os.Stderr))
+	// stop() before os.Exit, which runs no deferred call.
+	stop()
+	os.Exit(code)
 }

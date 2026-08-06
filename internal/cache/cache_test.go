@@ -52,11 +52,11 @@ func admit(t *testing.T, c *cache.Cache, body []byte) (hash string, accepted boo
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	if _, err := f.Write(body); err != nil {
-		t.Fatalf("write temp: %v", err)
+	if _, writeErr := f.Write(body); writeErr != nil {
+		t.Fatalf("write temp: %v", writeErr)
 	}
-	if err := f.Close(); err != nil {
-		t.Fatalf("close temp: %v", err)
+	if closeErr := f.Close(); closeErr != nil {
+		t.Fatalf("close temp: %v", closeErr)
 	}
 
 	accepted, err = c.Admit(hash, int64(len(body)), f.Name())
@@ -153,8 +153,8 @@ func TestOpenReturnsASeekableReader(t *testing.T) {
 	}
 	defer func() { _ = rc.Close() }()
 
-	if _, err := rc.Seek(4000, io.SeekStart); err != nil {
-		t.Fatalf("Seek: %v", err)
+	if _, seekErr := rc.Seek(4000, io.SeekStart); seekErr != nil {
+		t.Fatalf("Seek: %v", seekErr)
 	}
 	tail, err := io.ReadAll(rc)
 	if err != nil {

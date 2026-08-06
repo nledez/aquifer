@@ -20,13 +20,13 @@ type storeFlags struct {
 }
 
 func (s *storeFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&s.endpoint, "endpoint", env("AQUIFER_S3_ENDPOINT", ""),
+	fs.StringVar(&s.endpoint, "endpoint", env("AQUIFER_S3_ENDPOINT"),
 		"object storage endpoint URL (env AQUIFER_S3_ENDPOINT)")
-	fs.StringVar(&s.bucket, "bucket", env("AQUIFER_S3_BUCKET", ""),
+	fs.StringVar(&s.bucket, "bucket", env("AQUIFER_S3_BUCKET"),
 		"bucket name (env AQUIFER_S3_BUCKET)")
-	fs.StringVar(&s.keyPrefix, "key-prefix", env("AQUIFER_S3_PREFIX", ""),
+	fs.StringVar(&s.keyPrefix, "key-prefix", env("AQUIFER_S3_PREFIX"),
 		"key prefix inside the bucket (env AQUIFER_S3_PREFIX)")
-	fs.StringVar(&s.region, "region", env("AQUIFER_S3_REGION", ""),
+	fs.StringVar(&s.region, "region", env("AQUIFER_S3_REGION"),
 		"region, if the endpoint needs one (env AQUIFER_S3_REGION)")
 	fs.BoolVar(&s.pathStyle, "path-style", envBool("AQUIFER_S3_PATH_STYLE", true),
 		"use bucket-in-path addressing, which most non-AWS endpoints need")
@@ -47,11 +47,8 @@ func (s *storeFlags) open() (blobstore.Store, error) {
 	})
 }
 
-func env(name, fallback string) string {
-	if v, ok := os.LookupEnv(name); ok {
-		return v
-	}
-	return fallback
+func env(name string) string {
+	return os.Getenv(name)
 }
 
 func envBool(name string, fallback bool) bool {

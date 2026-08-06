@@ -12,6 +12,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -62,7 +63,7 @@ func main() {
 		patterns = []string{"./..."}
 	}
 
-	rendered, err := generate(patterns)
+	rendered, err := generate(context.Background(), patterns)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "notices: %v\n", err)
 		os.Exit(1)
@@ -78,8 +79,8 @@ func main() {
 	}
 }
 
-func generate(patterns []string) (string, error) {
-	pkgs, err := listPackages(patterns)
+func generate(ctx context.Context, patterns []string) (string, error) {
+	pkgs, err := listPackages(ctx, patterns)
 	if err != nil {
 		return "", err
 	}
@@ -181,9 +182,9 @@ func isLicenseFile(name string) bool {
 	return false
 }
 
-func listPackages(patterns []string) ([]listedPackage, error) {
+func listPackages(ctx context.Context, patterns []string) ([]listedPackage, error) {
 	args := append([]string{"list", "-deps", "-json"}, patterns...)
-	cmd := exec.Command("go", args...)
+	cmd := exec.CommandContext(ctx, "go", args...)
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

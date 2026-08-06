@@ -11,5 +11,9 @@ func availableBytes(dir string) (int64, bool) {
 	if err := syscall.Statfs(dir, &st); err != nil {
 		return 0, false
 	}
-	return int64(st.Bavail) * int64(st.Bsize), true
+	// Bsize is int64 on Linux and uint32 on darwin. Doing the arithmetic in
+	// uint64 - the type Bavail has on both - converts once, at the end, rather
+	// than writing a conversion that is redundant on one platform and required
+	// on the other.
+	return int64(st.Bavail * uint64(st.Bsize)), true
 }

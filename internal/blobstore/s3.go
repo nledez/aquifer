@@ -88,6 +88,9 @@ func parseEndpoint(endpoint string, insecure bool) (host string, secure bool, er
 	}
 }
 
+// ListBlobs enumerates the blob prefix and returns it sorted by digest. A key
+// this package did not write is skipped, so the GC can never delete an object
+// it does not understand.
 func (s *S3) ListBlobs(ctx context.Context) ([]BlobInfo, error) {
 	var out []BlobInfo
 	prefix := BlobsPrefix(s.prefix)
@@ -113,6 +116,7 @@ func (s *S3) ListBlobs(ctx context.Context) ([]BlobInfo, error) {
 	return out, nil
 }
 
+// StatBlob reports a blob's size and last-modified time without transferring it.
 func (s *S3) StatBlob(ctx context.Context, hash string) (BlobInfo, error) {
 	info, err := s.client.StatObject(ctx, s.bucket, BlobKey(s.prefix, hash), minio.StatObjectOptions{})
 	if err != nil {
@@ -121,16 +125,21 @@ func (s *S3) StatBlob(ctx context.Context, hash string) (BlobInfo, error) {
 	return BlobInfo{Hash: hash, Size: info.Size, LastModified: info.LastModified}, nil
 }
 
+// PutBlob uploads a blob under its digest. Re-uploading a digest already
+// present is harmless: content addressing makes the bytes identical.
 func (s *S3) PutBlob(ctx context.Context, hash string, r io.Reader, size int64) error {
 	_, err := s.client.PutObject(ctx, s.bucket, BlobKey(s.prefix, hash), r, size,
 		minio.PutObjectOptions{ContentType: "application/octet-stream"})
 	return mapErr(err, "put blob "+hash)
 }
 
+// GetBlob opens a blob for reading. The caller closes it.
 func (s *S3) GetBlob(ctx context.Context, hash string) (io.ReadCloser, error) {
 	return s.get(ctx, BlobKey(s.prefix, hash), "blob "+hash, minio.GetObjectOptions{})
 }
 
+// DeleteBlob removes a blob and counts an already-absent one as success, so an
+// interrupted GC run can be restarted without bookkeeping.
 func (s *S3) DeleteBlob(ctx context.Context, hash string) error {
 	err := s.client.RemoveObject(ctx, s.bucket, BlobKey(s.prefix, hash), minio.RemoveObjectOptions{})
 	if isNotFound(err) {
@@ -139,17 +148,21 @@ func (s *S3) DeleteBlob(ctx context.Context, hash string) error {
 	return mapErr(err, "delete blob "+hash)
 }
 
+// PutManifest stores one revision's manifest, compressed by the caller.
 func (s *S3) PutManifest(ctx context.Context, repo, revision string, r io.Reader, size int64) error {
 	_, err := s.client.PutObject(ctx, s.bucket, ManifestKey(s.prefix, repo, revision), r, size,
 		minio.PutObjectOptions{ContentType: "application/zstd"})
 	return mapErr(err, "put manifest "+repo+"/"+revision)
 }
 
+// GetManifest opens one revision's manifest. The caller closes it.
 func (s *S3) GetManifest(ctx context.Context, repo, revision string) (io.ReadCloser, error) {
 	return s.get(ctx, ManifestKey(s.prefix, repo, revision),
 		"manifest "+repo+"/"+revision, minio.GetObjectOptions{})
 }
 
+// ListManifests returns a repo's revisions in ascending revision order, which
+// is chronological because a revision is timestamp-prefixed.
 func (s *S3) ListManifests(ctx context.Context, repo string) ([]ManifestInfo, error) {
 	var out []ManifestInfo
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
@@ -176,6 +189,8 @@ func (s *S3) ListManifests(ctx context.Context, repo string) ([]ManifestInfo, er
 	return out, nil
 }
 
+// DeleteManifest removes one revision's manifest, absent counting as success
+// as it does for DeleteBlob.
 func (s *S3) DeleteManifest(ctx context.Context, repo, revision string) error {
 	err := s.client.RemoveObject(ctx, s.bucket, ManifestKey(s.prefix, repo, revision),
 		minio.RemoveObjectOptions{})
@@ -185,6 +200,8 @@ func (s *S3) DeleteManifest(ctx context.Context, repo, revision string) error {
 	return mapErr(err, "delete manifest "+repo+"/"+revision)
 }
 
+// SetRef writes the repo's pointer. It is the last object a publication writes
+// and the one that makes it visible.
 func (s *S3) SetRef(ctx context.Context, repo, revision string) error {
 	body := revision + "\n"
 	_, err := s.client.PutObject(ctx, s.bucket, RefKey(s.prefix, repo),
@@ -193,6 +210,9 @@ func (s *S3) SetRef(ctx context.Context, repo, revision string) error {
 	return mapErr(err, "set ref "+repo)
 }
 
+// GetRef reads the repo's pointer. A non-empty ifNoneMatch makes this a
+// conditional GET - how an edge polls without transferring anything - and an
+// unchanged ref reports ErrNotModified.
 func (s *S3) GetRef(ctx context.Context, repo, ifNoneMatch string) (Ref, error) {
 	opts := minio.GetObjectOptions{}
 	if ifNoneMatch != "" {
@@ -223,6 +243,8 @@ func (s *S3) GetRef(ctx context.Context, repo, ifNoneMatch string) (Ref, error) 
 	return Ref{Revision: revision, ETag: info.ETag}, nil
 }
 
+// ListRepos derives the published repos from the refs prefix: a repo exists
+// exactly when it has a ref.
 func (s *S3) ListRepos(ctx context.Context) ([]string, error) {
 	var out []string
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{

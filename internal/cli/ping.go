@@ -51,7 +51,7 @@ func runPing(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("ping", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: aquifer ping [flags]\n\n"+
+		_, _ = fmt.Fprint(stderr, "Usage: aquifer ping [flags]\n\n"+
 			"Queries /readyz on the local instance. Exits 0 when it is ready, 1 otherwise.\n"+
 			"Silent on success; on failure it prints which condition failed.\n\n")
 		fs.PrintDefaults()
@@ -81,17 +81,17 @@ func runPing(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 
 	body, status, err := fetchReadyz(ctx, target)
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer: %s is not answering: %v\n", target, err)
+		_, _ = fmt.Fprintf(stderr, "aquifer: %s is not answering: %v\n", target, err)
 		return 1
 	}
 
 	if *verbose {
-		fmt.Fprintln(stdout, strings.TrimRight(string(body), "\n"))
+		_, _ = fmt.Fprintln(stdout, strings.TrimRight(string(body), "\n"))
 	}
 
 	var report pingReport
 	if err := json.Unmarshal(body, &report); err != nil {
-		fmt.Fprintf(stderr, "aquifer: %s returned status %d with an unreadable body: %v\n",
+		_, _ = fmt.Fprintf(stderr, "aquifer: %s returned status %d with an unreadable body: %v\n",
 			target, status, err)
 		return 1
 	}
@@ -99,7 +99,7 @@ func runPing(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if status == http.StatusOK && report.Ready {
 		return 0
 	}
-	fmt.Fprintf(stderr, "aquifer: not ready: %s\n", describeFailure(report, status))
+	_, _ = fmt.Fprintf(stderr, "aquifer: not ready: %s\n", describeFailure(report, status))
 	return 1
 }
 

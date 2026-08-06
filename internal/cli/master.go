@@ -24,7 +24,7 @@ func runPublish(ctx context.Context, args []string, stdout, stderr io.Writer) in
 	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: aquifer publish [flags] <publication-directory>\n\n"+
+		_, _ = fmt.Fprint(stderr, "Usage: aquifer publish [flags] <publication-directory>\n\n"+
 			"Uploads an aptly publication to object storage and commits a new revision.\n\n")
 		fs.PrintDefaults()
 	}
@@ -45,7 +45,7 @@ func runPublish(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		return 2
 	}
 	if *repo == "" {
-		fmt.Fprintln(stderr, "aquifer publish: -repo is required")
+		_, _ = fmt.Fprintln(stderr, "aquifer publish: -repo is required")
 		return 2
 	}
 
@@ -59,7 +59,7 @@ func runPublish(ctx context.Context, args []string, stdout, stderr io.Writer) in
 
 	s, err := store.open()
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer publish: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer publish: %v\n", err)
 		return 1
 	}
 
@@ -74,11 +74,11 @@ func runPublish(ctx context.Context, args []string, stdout, stderr io.Writer) in
 		Logger:      log,
 	})
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer publish: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer publish: %v\n", err)
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "%s %s: %d entries, %s; uploaded %d blobs (%s), %d already present, %d hashed\n",
+	_, _ = fmt.Fprintf(stdout, "%s %s: %d entries, %s; uploaded %d blobs (%s), %d already present, %d hashed\n",
 		res.Repo, res.Revision, res.Entries, humanBytes(res.Bytes),
 		res.Uploaded, humanBytes(res.UploadedBytes), res.Skipped, res.Hashed)
 	return 0
@@ -88,7 +88,7 @@ func runGC(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("gc", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: aquifer gc [flags]\n\n"+
+		_, _ = fmt.Fprint(stderr, "Usage: aquifer gc [flags]\n\n"+
 			"Deletes blobs no retained revision references, and manifests that have\n"+
 			"fallen out of every repo's window.\n\n")
 		fs.PrintDefaults()
@@ -110,13 +110,13 @@ func runGC(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	if *grace < 0 {
-		fmt.Fprintln(stderr, "aquifer gc: -grace cannot be negative")
+		_, _ = fmt.Fprintln(stderr, "aquifer gc: -grace cannot be negative")
 		return 2
 	}
 
 	s, err := store.open()
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer gc: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer gc: %v\n", err)
 		return 1
 	}
 
@@ -129,7 +129,7 @@ func runGC(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 		Logger: log,
 	})
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer gc: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer gc: %v\n", err)
 		return 1
 	}
 
@@ -137,7 +137,7 @@ func runGC(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if *dryRun {
 		verb = "would delete"
 	}
-	fmt.Fprintf(stdout, "%d repos, %d blobs scanned, %d referenced; %s %d blobs (%s) and %d manifests; %d spared by the grace period\n",
+	_, _ = fmt.Fprintf(stdout, "%d repos, %d blobs scanned, %d referenced; %s %d blobs (%s) and %d manifests; %d spared by the grace period\n",
 		res.Repos, res.ScannedBlobs, res.ReferencedBlobs,
 		verb, res.DeletedBlobs, humanBytes(res.DeletedBytes), res.DeletedManifests, res.KeptYoung)
 	return 0

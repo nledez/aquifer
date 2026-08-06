@@ -50,6 +50,7 @@ func (m *Mem) now() time.Time {
 	return m.clock
 }
 
+// ListBlobs returns every stored blob, sorted by digest as the S3 store is.
 func (m *Mem) ListBlobs(ctx context.Context) ([]blobstore.BlobInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -71,6 +72,7 @@ func (m *Mem) ListBlobs(ctx context.Context) ([]blobstore.BlobInfo, error) {
 	return out, nil
 }
 
+// StatBlob reports a blob's size and the timestamp its write was given.
 func (m *Mem) StatBlob(ctx context.Context, hash string) (blobstore.BlobInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return blobstore.BlobInfo{}, err
@@ -89,6 +91,8 @@ func (m *Mem) StatBlob(ctx context.Context, hash string) (blobstore.BlobInfo, er
 	}, nil
 }
 
+// PutBlob reads the whole body into memory. The declared size is ignored: the
+// bytes are whatever the reader produced.
 func (m *Mem) PutBlob(ctx context.Context, hash string, r io.Reader, _ int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -103,6 +107,7 @@ func (m *Mem) PutBlob(ctx context.Context, hash string, r io.Reader, _ int64) er
 	return nil
 }
 
+// GetBlob reads from the stored bytes.
 func (m *Mem) GetBlob(ctx context.Context, hash string) (io.ReadCloser, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -117,6 +122,7 @@ func (m *Mem) GetBlob(ctx context.Context, hash string) (io.ReadCloser, error) {
 	return io.NopCloser(bytes.NewReader(obj.body)), nil
 }
 
+// DeleteBlob removes a blob and succeeds when it was already absent.
 func (m *Mem) DeleteBlob(ctx context.Context, hash string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -127,6 +133,7 @@ func (m *Mem) DeleteBlob(ctx context.Context, hash string) error {
 	return nil
 }
 
+// PutManifest stores one revision's manifest bytes verbatim.
 func (m *Mem) PutManifest(ctx context.Context, repo, revision string, r io.Reader, _ int64) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -144,6 +151,7 @@ func (m *Mem) PutManifest(ctx context.Context, repo, revision string, r io.Reade
 	return nil
 }
 
+// GetManifest reads from the stored manifest bytes.
 func (m *Mem) GetManifest(ctx context.Context, repo, revision string) (io.ReadCloser, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -158,6 +166,7 @@ func (m *Mem) GetManifest(ctx context.Context, repo, revision string) (io.ReadCl
 	return io.NopCloser(bytes.NewReader(obj.body)), nil
 }
 
+// ListManifests returns a repo's revisions in ascending revision order.
 func (m *Mem) ListManifests(ctx context.Context, repo string) ([]blobstore.ManifestInfo, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -179,6 +188,7 @@ func (m *Mem) ListManifests(ctx context.Context, repo string) ([]blobstore.Manif
 	return out, nil
 }
 
+// DeleteManifest removes one revision and succeeds when it was already absent.
 func (m *Mem) DeleteManifest(ctx context.Context, repo, revision string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -189,6 +199,8 @@ func (m *Mem) DeleteManifest(ctx context.Context, repo, revision string) error {
 	return nil
 }
 
+// SetRef publishes a revision, deriving an ETag from it so that conditional
+// reads behave as they do against S3.
 func (m *Mem) SetRef(ctx context.Context, repo, revision string) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -203,6 +215,8 @@ func (m *Mem) SetRef(ctx context.Context, repo, revision string) error {
 	return nil
 }
 
+// GetRef reads the repo's pointer and reports ErrNotModified when ifNoneMatch
+// still matches.
 func (m *Mem) GetRef(ctx context.Context, repo, ifNoneMatch string) (blobstore.Ref, error) {
 	if err := ctx.Err(); err != nil {
 		return blobstore.Ref{}, err
@@ -220,6 +234,7 @@ func (m *Mem) GetRef(ctx context.Context, repo, ifNoneMatch string) (blobstore.R
 	return ref, nil
 }
 
+// ListRepos returns the repos that have a ref, sorted.
 func (m *Mem) ListRepos(ctx context.Context) ([]string, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

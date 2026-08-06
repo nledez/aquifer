@@ -92,17 +92,17 @@ func GC(ctx context.Context, opts GCOptions) (*GCResult, error) {
 	referenced := map[string]bool{}
 
 	for _, repo := range repos {
-		retained, dropped, err := planRepo(ctx, opts.Store, repo, keep)
-		if err != nil {
-			return nil, err
+		retained, dropped, planErr := planRepo(ctx, opts.Store, repo, keep)
+		if planErr != nil {
+			return nil, planErr
 		}
 
 		// Read every retained manifest before deleting anything. A manifest we
 		// cannot read is a hard failure: treating it as referencing nothing
 		// would delete precisely the blobs it alone protects.
 		for _, revision := range retained {
-			if err := collectReferences(ctx, opts.Store, repo, revision, referenced); err != nil {
-				return nil, err
+			if refErr := collectReferences(ctx, opts.Store, repo, revision, referenced); refErr != nil {
+				return nil, refErr
 			}
 		}
 
@@ -112,8 +112,8 @@ func GC(ctx context.Context, opts GCOptions) (*GCResult, error) {
 			if opts.DryRun {
 				continue
 			}
-			if err := opts.Store.DeleteManifest(ctx, repo, revision); err != nil {
-				return nil, fmt.Errorf("publish: delete manifest %s/%s: %w", repo, revision, err)
+			if delErr := opts.Store.DeleteManifest(ctx, repo, revision); delErr != nil {
+				return nil, fmt.Errorf("publish: delete manifest %s/%s: %w", repo, revision, delErr)
 			}
 		}
 	}

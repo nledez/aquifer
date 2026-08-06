@@ -26,16 +26,16 @@ Commands:
 // Main dispatches a subcommand and returns the process exit code.
 func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprint(stderr, usage)
+		_, _ = fmt.Fprint(stderr, usage)
 		return 2
 	}
 
 	switch args[0] {
 	case "version", "--version", "-v":
-		fmt.Fprintln(stdout, version)
+		_, _ = fmt.Fprintln(stdout, version)
 		return 0
 	case "help", "--help", "-h":
-		fmt.Fprint(stdout, usage)
+		_, _ = fmt.Fprint(stdout, usage)
 		return 0
 	case "publish":
 		return runPublish(ctx, args[1:], stdout, stderr)
@@ -46,7 +46,7 @@ func Main(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	case "ping":
 		return runPing(ctx, args[1:], stdout, stderr)
 	default:
-		fmt.Fprintf(stderr, "aquifer: unknown command %q\n\n%s", args[0], usage)
+		_, _ = fmt.Fprintf(stderr, "aquifer: unknown command %q\n\n%s", args[0], usage)
 		return 2
 	}
 }

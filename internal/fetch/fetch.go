@@ -473,15 +473,15 @@ func (e *entry) finish(err error) {
 }
 
 // state snapshots what a reader needs in one lock acquisition.
-func (e *entry) state() (done bool, err error, advance chan struct{}) {
+func (e *entry) state() (done bool, advance chan struct{}, err error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.done, e.err, e.advance
+	return e.done, e.advance, e.err
 }
 
 func (e *entry) waitDone(ctx context.Context) error {
 	for {
-		done, err, advance := e.state()
+		done, advance, err := e.state()
 		if done {
 			return err
 		}
@@ -523,7 +523,7 @@ func (r *blobReader) Read(p []byte) (int, error) {
 			continue
 		}
 
-		done, err, advance := r.e.state()
+		done, advance, err := r.e.state()
 		if r.e.written.Load() > r.pos {
 			continue // progressed while we were reading the state
 		}

@@ -352,7 +352,7 @@ func TestRevisionsSortLexicographicallyByTime(t *testing.T) {
 	older := manifest.NewRevision(time.Unix(1754400000, 0))
 	newer := manifest.NewRevision(time.Unix(1754400001, 0))
 
-	if !(older < newer) {
+	if older >= newer {
 		t.Fatalf("revision %q should sort before %q", older, newer)
 	}
 	if older == manifest.NewRevision(time.Unix(1754400000, 0)) {

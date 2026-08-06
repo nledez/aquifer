@@ -34,7 +34,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		fmt.Fprint(stderr, "Usage: aquifer serve [flags]\n\n"+
+		_, _ = fmt.Fprint(stderr, "Usage: aquifer serve [flags]\n\n"+
 			"Serves apt clients from a local cache backed by object storage.\n\n")
 		fs.PrintDefaults()
 	}
@@ -56,17 +56,17 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 
 	path := findConfig(*configPath)
 	if path == "" {
-		fmt.Fprintln(stderr, "aquifer serve: no configuration file found; pass -config or set AQUIFER_CONFIG")
+		_, _ = fmt.Fprintln(stderr, "aquifer serve: no configuration file found; pass -config or set AQUIFER_CONFIG")
 		return 2
 	}
 
 	cfg, err := LoadConfig(path)
 	if err != nil {
-		fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
 		return 2
 	}
 	if err := cfg.ApplyEnv(envLookup); err != nil {
-		fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
 		return 2
 	}
 
@@ -78,7 +78,7 @@ func runServe(ctx context.Context, args []string, stdout, stderr io.Writer) int 
 	overrideString(&cfg.Log.Level, *logLevel)
 
 	if err := cfg.Validate(); err != nil {
-		fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "aquifer serve: %v\n", err)
 		return 2
 	}
 
@@ -180,7 +180,7 @@ func serve(ctx context.Context, cfg *Config, log *slog.Logger, stdout io.Writer)
 		"listen", cfg.Listen, "admin", cfg.AdminListen,
 		"repos", len(cfg.Repos), "cache_dir", cfg.Cache.Dir,
 		"max_size", int64(cfg.Cache.MaxSize), "version", version)
-	fmt.Fprintf(stdout, "aquifer %s serving %d repo(s) on %s (admin on %s)\n",
+	_, _ = fmt.Fprintf(stdout, "aquifer %s serving %d repo(s) on %s (admin on %s)\n",
 		version, len(cfg.Repos), cfg.Listen, cfg.AdminListen)
 
 	errs := make(chan error, 2)

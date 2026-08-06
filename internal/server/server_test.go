@@ -216,7 +216,39 @@ func (h *harness) do(t *testing.T, method, path string, headers map[string]strin
 	if err != nil {
 		t.Fatalf("%s %s: %v", method, path, err)
 	}
+	// Callers that only look at the status never reach bodyOf, and an
+	// unclosed body holds its connection for the rest of the test.
+	t.Cleanup(func() { _ = resp.Body.Close() })
 	return resp
+}
+
+// get issues a GET carrying the test's context, for the servers the harness
+// does not front: the admin listener and the occasional bare httptest server.
+func get(t *testing.T, client *http.Client, url string) *http.Response {
+	t.Helper()
+
+	resp, err := tryGet(t, client, url)
+	if err != nil {
+		t.Fatalf("GET %s: %v", url, err)
+	}
+	return resp
+}
+
+// tryGet is get for a poll, where a request that has not succeeded yet is not
+// a failure. The caller decides what to do with the error.
+func tryGet(t *testing.T, client *http.Client, url string) (*http.Response, error) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, url, nil)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() { _ = resp.Body.Close() })
+	return resp, nil
 }
 
 func bodyOf(t *testing.T, resp *http.Response) []byte {
@@ -607,29 +639,21 @@ func TestHealthAndReadiness(t *testing.T) {
 		pinned: []string{"**/dists/**"},
 	})
 
-	resp, err := h.admin.Client().Get(h.admin.URL + "/healthz")
-	if err != nil {
-		t.Fatalf("healthz: %v", err)
-	}
+	resp := get(t, h.admin.Client(), h.admin.URL+"/healthz")
 	_ = bodyOf(t, resp)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("healthz status = %d", resp.StatusCode)
 	}
 
 	waitUntil(t, "readiness", func() bool {
-		r, err := h.admin.Client().Get(h.admin.URL + "/readyz")
+		r, err := tryGet(t, h.admin.Client(), h.admin.URL+"/readyz")
 		if err != nil {
 			return false
 		}
-		_ = r.Body.Close()
 		return r.StatusCode == http.StatusOK
 	})
 
-	r, err := h.admin.Client().Get(h.admin.URL + "/readyz")
-	if err != nil {
-		t.Fatalf("readyz: %v", err)
-	}
-	body := bodyOf(t, r)
+	body := bodyOf(t, get(t, h.admin.Client(), h.admin.URL+"/readyz"))
 	if !strings.Contains(string(body), "debian/bookworm") {
 		t.Fatalf("readyz body does not mention the repo: %s", body)
 	}
@@ -655,11 +679,7 @@ func TestMetricsExposeTheSpecifiedSeries(t *testing.T) {
 		return h.cache.Stats().PinnedObjects == 2
 	})
 
-	metrics, err := h.admin.Client().Get(h.admin.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("metrics: %v", err)
-	}
-	body := string(bodyOf(t, metrics))
+	body := string(bodyOf(t, get(t, h.admin.Client(), h.admin.URL+"/metrics")))
 
 	for _, name := range []string{
 		"aquifer_cache_requests_total",
@@ -722,11 +742,7 @@ func TestAuthorizerCanRefuseARequest(t *testing.T) {
 	front := httptest.NewServer(srv.Handler())
 	defer front.Close()
 
-	resp, err := front.Client().Get(front.URL + "/debian/bookworm/pool/main/n/nginx/nginx_1.24.0-1_amd64.deb")
-	if err != nil {
-		t.Fatalf("GET: %v", err)
-	}
-	_ = resp.Body.Close()
+	resp := get(t, front.Client(), front.URL+"/debian/bookworm/pool/main/n/nginx/nginx_1.24.0-1_amd64.deb")
 	if resp.StatusCode != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", resp.StatusCode)
 	}
@@ -770,11 +786,7 @@ func TestASuccessfulMissIsNotCountedAsAnError(t *testing.T) {
 		t.Fatalf("body is %d bytes, want %d", len(got), len(payload))
 	}
 
-	metrics, err := h.admin.Client().Get(h.admin.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("metrics: %v", err)
-	}
-	body := string(bodyOf(t, metrics))
+	body := string(bodyOf(t, get(t, h.admin.Client(), h.admin.URL+"/metrics")))
 
 	if !strings.Contains(body, `aquifer_cache_requests_total{class="pool",result="miss"} 1`) {
 		t.Fatalf("the fetch was not counted as a miss:\n%s", body)
@@ -811,10 +823,7 @@ func TestAStreamedMissDeliversEveryByte(t *testing.T) {
 func (h *harness) metricValue(t *testing.T, series string) float64 {
 	t.Helper()
 
-	resp, err := h.admin.Client().Get(h.admin.URL + "/metrics")
-	if err != nil {
-		t.Fatalf("metrics: %v", err)
-	}
+	resp := get(t, h.admin.Client(), h.admin.URL+"/metrics")
 	for line := range strings.SplitSeq(string(bodyOf(t, resp)), "\n") {
 		name, value, ok := strings.Cut(line, " ")
 		if !ok || name != series {

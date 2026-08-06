@@ -101,7 +101,7 @@ func Run(ctx context.Context, pub Publication, opts Options) (*Result, error) {
 	if err != nil {
 		return nil, fmt.Errorf("publish: %w", err)
 	}
-	if info, err := os.Stat(filepath.Join(root, distsDir)); err != nil || !info.IsDir() {
+	if info, statErr := os.Stat(filepath.Join(root, distsDir)); statErr != nil || !info.IsDir() {
 		return nil, fmt.Errorf("publish: %s holds no %s/ directory; it is not an archive root",
 			root, distsDir)
 	}

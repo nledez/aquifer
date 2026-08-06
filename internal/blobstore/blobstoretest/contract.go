@@ -197,8 +197,8 @@ func RunStoreContract(t *testing.T, newStore func(t *testing.T) blobstore.Store)
 			t.Fatalf("ListManifests = %v, want %v", got, want)
 		}
 
-		if err := s.DeleteManifest(ctx, repo, "1754400000-aaaa"); err != nil {
-			t.Fatalf("DeleteManifest: %v", err)
+		if delErr := s.DeleteManifest(ctx, repo, "1754400000-aaaa"); delErr != nil {
+			t.Fatalf("DeleteManifest: %v", delErr)
 		}
 		infos, err = s.ListManifests(ctx, repo)
 		if err != nil {
@@ -233,12 +233,12 @@ func RunStoreContract(t *testing.T, newStore func(t *testing.T) blobstore.Store)
 		}
 
 		// Polling with the etag we already hold must not re-download the ref.
-		if _, err := s.GetRef(ctx, repo, ref.ETag); !errors.Is(err, blobstore.ErrNotModified) {
-			t.Fatalf("GetRef with a matching etag: got %v, want ErrNotModified", err)
+		if _, pollErr := s.GetRef(ctx, repo, ref.ETag); !errors.Is(pollErr, blobstore.ErrNotModified) {
+			t.Fatalf("GetRef with a matching etag: got %v, want ErrNotModified", pollErr)
 		}
 
-		if err := s.SetRef(ctx, repo, "1754400100-bbbb"); err != nil {
-			t.Fatalf("SetRef: %v", err)
+		if setErr := s.SetRef(ctx, repo, "1754400100-bbbb"); setErr != nil {
+			t.Fatalf("SetRef: %v", setErr)
 		}
 		updated, err := s.GetRef(ctx, repo, ref.ETag)
 		if err != nil {

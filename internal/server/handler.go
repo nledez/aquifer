@@ -270,7 +270,8 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, res resolved) str
 	if r.Header.Get("Range") != "" {
 		rs, err := s.coalescer.FetchSeeker(r.Context(), res.entry.SHA256, res.entry.Size)
 		if err != nil {
-			return s.fail(w, r, res, err)
+			s.fail(w, r, res, err)
+			return resultError
 		}
 		defer func() { _ = rs.Close() }()
 		http.ServeContent(w, r, res.filename, res.modTime, rs)
@@ -279,7 +280,8 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, res resolved) str
 
 	rc, err := s.coalescer.Fetch(r.Context(), res.entry.SHA256, res.entry.Size)
 	if err != nil {
-		return s.fail(w, r, res, err)
+		s.fail(w, r, res, err)
+		return resultError
 	}
 	defer func() { _ = rc.Close() }()
 
@@ -316,15 +318,14 @@ func (s *Server) write(w http.ResponseWriter, r *http.Request, res resolved) str
 	}
 }
 
-func (s *Server) fail(w http.ResponseWriter, r *http.Request, res resolved, err error) string {
+func (s *Server) fail(w http.ResponseWriter, r *http.Request, res resolved, err error) {
 	if errors.Is(err, r.Context().Err()) && r.Context().Err() != nil {
 		// The client gave up. Nothing to report and nowhere to report it.
-		return resultError
+		return
 	}
 	s.log.Error("could not fetch a blob",
 		"path", r.URL.Path, "hash", res.entry.SHA256, "error", err)
 	http.Error(w, "upstream fetch failed", http.StatusBadGateway)
-	return resultError
 }
 
 // matchesETag implements the subset of If-None-Match that matters here: an

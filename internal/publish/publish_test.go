@@ -386,7 +386,7 @@ func TestPublishIgnoresAReleaseThatListsItself(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Release: %v", err)
 	}
-	augmented := append(existing, []byte(" "+digest([]byte("stale"))+" 111 Release\n")...)
+	augmented := append(slices.Clone(existing), []byte(" "+digest([]byte("stale"))+" 111 Release\n")...)
 	writeFile(t, releasePath, augmented)
 
 	store := blobstoretest.NewMem()
@@ -416,7 +416,7 @@ func TestPublishStillChecksAPerComponentRelease(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read Release: %v", err)
 	}
-	augmented := append(existing,
+	augmented := append(slices.Clone(existing),
 		[]byte(" "+digest([]byte("whatever"))+" 111 main/binary-amd64/Release\n")...)
 	writeFile(t, releasePath, augmented)
 
