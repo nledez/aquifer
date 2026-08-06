@@ -37,9 +37,10 @@ of every applicable license and notice file is reproduced verbatim.
 
 // listedPackage is the subset of "go list -json" output that we need.
 type listedPackage struct {
-	Dir      string `json:"Dir"`
-	Standard bool   `json:"Standard"`
-	Module   *struct {
+	ImportPath string `json:"ImportPath"`
+	Dir        string `json:"Dir"`
+	Standard   bool   `json:"Standard"`
+	Module     *struct {
 		Path    string `json:"Path"`
 		Version string `json:"Version"`
 		Dir     string `json:"Dir"`
@@ -182,9 +183,46 @@ func isLicenseFile(name string) bool {
 	return false
 }
 
+// targets are the platforms the project distributes: the two the image is
+// built for, which are also the two the release binaries are built for.
+//
+// go list resolves build constraints for one platform at a time, so the answer
+// depends on the machine running it. github.com/prometheus/procfs, which
+// client_golang pulls in for its process collector, exists on Linux and not on
+// darwin - a notices file generated on a Mac would omit a license the shipped
+// Linux binary is bound by. List every target and merge.
+var targets = []struct{ goos, goarch string }{
+	{"linux", "amd64"},
+	{"linux", "arm64"},
+}
+
+// listPackages returns the union of the dependencies of every target platform,
+// deduplicated by import path and in a deterministic order.
 func listPackages(ctx context.Context, patterns []string) ([]listedPackage, error) {
+	var (
+		all  []listedPackage
+		seen = map[string]bool{}
+	)
+	for _, target := range targets {
+		pkgs, err := listPackagesFor(ctx, target.goos, target.goarch, patterns)
+		if err != nil {
+			return nil, fmt.Errorf("%s/%s: %w", target.goos, target.goarch, err)
+		}
+		for _, pkg := range pkgs {
+			if pkg.ImportPath != "" && seen[pkg.ImportPath] {
+				continue
+			}
+			seen[pkg.ImportPath] = true
+			all = append(all, pkg)
+		}
+	}
+	return all, nil
+}
+
+func listPackagesFor(ctx context.Context, goos, goarch string, patterns []string) ([]listedPackage, error) {
 	args := append([]string{"list", "-deps", "-json"}, patterns...)
 	cmd := exec.CommandContext(ctx, "go", args...)
+	cmd.Env = append(os.Environ(), "GOOS="+goos, "GOARCH="+goarch)
 	cmd.Stderr = os.Stderr
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
