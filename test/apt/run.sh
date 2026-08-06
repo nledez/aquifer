@@ -35,10 +35,15 @@ log()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail() { printf '\033[31mFAIL: %s\033[0m\n' "$*" >&2; exit 1; }
 
 cleanup() {
+  # The EXIT trap's own status becomes the script's, so a cleanup that trips
+  # reports a failure the test never had. Carry the real result through, and
+  # say out loud what was left behind rather than swallowing it.
+  local status=$?
   docker rm -f aquifer-apt-edge aquifer-apt-minio >/dev/null 2>&1 || true
   docker volume rm aquifer-apt-cache >/dev/null 2>&1 || true
   docker network rm "$NETWORK" >/dev/null 2>&1 || true
-  rm -rf "$WORK"
+  rm -rf "$WORK" || printf 'warning: %s could not be removed\n' "$WORK" >&2
+  return "$status"
 }
 trap cleanup EXIT
 
@@ -55,6 +60,7 @@ for suite in "${SUITES[@]}"; do
     -e SUITE="$suite" \
     -e ARCHS="${ARCHS[*]}" \
     -e PACKAGE="$PACKAGE" \
+    -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
     "debian:$suite" \
     bash -euo pipefail -c '
       export DEBIAN_FRONTEND=noninteractive
@@ -113,6 +119,13 @@ for suite in "${SUITES[@]}"; do
       # has to hash it itself.
       mkdir -p /repo/keys
       gpg --batch --quiet --armor --export > "/repo/keys/$SUITE.asc"
+
+      # Everything above ran as root, which on a Linux host means the bind
+      # mount now holds root-owned files the caller cannot delete: removing a
+      # file needs write permission on its directory, and those are root-owned
+      # too. Hand the tree back before leaving, or cleanup fails on a run that
+      # otherwise passed.
+      chown -R "$HOST_UID:$HOST_GID" /repo
     ' >/dev/null
 
   [ -s "$REPO/$suite/dists/$suite/InRelease" ] || fail "no InRelease was produced for $suite"
