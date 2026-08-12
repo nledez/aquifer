@@ -150,6 +150,19 @@ release new_version:
     [ "$branch" = main ] || { echo "release: on '$branch', not main" >&2; exit 1; }
     [ -z "$(git status --porcelain)" ] || { echo "release: the tree is dirty" >&2; exit 1; }
 
+    # A release whose notices file is stale ships a licence list that does not
+    # match the binary inside the archives. CI checks this too, but only after
+    # the tag is pushed, and by then the only way out is another tag.
+    #
+    # This regenerates the file, so a failure leaves it modified in the tree.
+    # That is the fix, ready to commit.
+    if ! notices=$({{just_executable()}} notices-check 2>&1); then
+        echo "$notices" >&2
+        echo "release: THIRD-PARTY-NOTICES.txt is out of date" >&2
+        echo "release: the regenerated file is in your tree - commit it, then run again" >&2
+        exit 1
+    fi
+
     # Ask origin before fetching, or the fetch below pulls the tag down and the
     # local check reports it as local. A tag that exists only on the remote
     # would otherwise surface at the push, with the commit and the tag already

@@ -175,7 +175,11 @@ just release 0.2.0
 
 It writes the changelog entry from the commits since the last tag, commits it,
 tags `v0.2.0` and pushes both. It refuses to run from a dirty tree, from
-anywhere but `main`, or when `main` and `origin/main` have diverged.
+anywhere but `main`, when `main` and `origin/main` have diverged, or when
+`THIRD-PARTY-NOTICES.txt` no longer matches the dependencies — the archives
+ship that file, so a stale one would state licences the binary beside it does
+not have. A refusal on that last count leaves the regenerated file in the tree,
+ready to commit.
 
 Pushing the tag is what publishes. CI runs the whole suite on the tagged
 commit, then pushes the image and creates the GitHub Release with the four
