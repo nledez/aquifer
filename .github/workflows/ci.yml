@@ -11,6 +11,17 @@ on:
 permissions:
   contents: read
 
+# Two commits in quick succession would otherwise run two publish jobs writing
+# the same edge tag at once: both spend registry quota, one of them for a
+# result that is immediately superseded. GitHub answers that burst with a
+# secondary rate limit, and the push fails.
+#
+# A tag is never cancelled. An interrupted release publishes nothing, and the
+# tag would have to be cut again to retry.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
 env:
   CGO_ENABLED: "0"
 
