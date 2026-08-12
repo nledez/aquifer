@@ -11,7 +11,7 @@ for each edge to finish prefetching before touching the next.
 
 variable "image" {
   type        = string
-  default     = "ghcr.io/nledez/aquifer:0.1.0"
+  default     = "ghcr.io/nledez/aquifer:latest"
   description = "Never latest. A rollback has to be a version, not a hope."
 }
 
@@ -237,7 +237,7 @@ job "aquifer-publish" {
       driver = "docker"
 
       config {
-        image      = "ghcr.io/nledez/aquifer:0.1.0"
+        image      = "ghcr.io/nledez/aquifer:latest"
         entrypoint = ["/aquifer"]
         args       = ["publish", "--repo", "debian/bookworm", "--json", "/publication"]
 

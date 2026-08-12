@@ -50,14 +50,12 @@ updates:
     commit-message:
       prefix: "build"
 
-  # The compose file is the operator-facing deployment: a pinned MinIO release
-  # and the published aquifer image. Releases bump the latter, so leave it to
-  # the release process rather than letting Dependabot race it.
+  # The compose file is the operator-facing deployment. Only MinIO is pinned to
+  # a version there; the aquifer image tracks latest, so there is nothing for
+  # Dependabot to bump on it and nothing to exclude.
   - package-ecosystem: docker-compose
     directory: /deploy
     schedule:
       interval: weekly
     commit-message:
       prefix: "build"
-    ignore:
-      - dependency-name: ghcr.io/nledez/aquifer

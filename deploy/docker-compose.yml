@@ -43,7 +43,7 @@ services:
     restart: "no"
 
   edge:
-    image: ghcr.io/nledez/aquifer:0.1.0
+    image: ghcr.io/nledez/aquifer:latest
     depends_on:
       minio-init:
         condition: service_completed_successfully

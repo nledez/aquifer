@@ -45,14 +45,14 @@ for `linux/amd64` and `linux/arm64`, on a distroless base, running as uid 65532
 with no shell.
 
 ```sh
-docker pull ghcr.io/nledez/aquifer:0.1.0
-docker run --rm ghcr.io/nledez/aquifer:0.1.0 version
+docker pull ghcr.io/nledez/aquifer:latest
+docker run --rm ghcr.io/nledez/aquifer:latest version
 ```
 
 | tag | what it is |
 |---|---|
-| `0.1.0`, `0.1` | a release, built from the `v0.1.0` git tag |
-| `latest` | the newest release |
+| `latest` | the newest release; what the guides here use |
+| `X.Y.Z`, `X.Y` | a specific release, built from the `vX.Y.Z` git tag |
 | `edge` | the current `main`; not a release |
 
 CI publishes a tag only after the unit tests, the MinIO integration suite, the
