@@ -3,6 +3,12 @@
 Newest first. Written by `just release` from the commit subjects
 since the previous tag.
 
+## 0.1.4 - 2026-08-12
+
+- build: bump github.com/klauspost/compress in the gomod group
+- build: bump distroless/static-debian12 from `f5b485e` to `1b7b9f0`
+- build(ci): let a newer run supersede the one it makes obsolete
+
 ## 0.1.3 - 2026-08-12
 
 
