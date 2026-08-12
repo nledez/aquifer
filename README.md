@@ -37,6 +37,39 @@ That single decision buys three things:
   twice at once. Forty machines colliding on one uncached 90 MiB package cost
   90 MiB of egress, not 3.6 GiB.
 
+## Container image
+
+Published to
+[`ghcr.io/nledez/aquifer`](https://github.com/nledez/aquifer/pkgs/container/aquifer)
+for `linux/amd64` and `linux/arm64`, on a distroless base, running as uid 65532
+with no shell.
+
+```sh
+docker pull ghcr.io/nledez/aquifer:0.1.0
+docker run --rm ghcr.io/nledez/aquifer:0.1.0 version
+```
+
+| tag | what it is |
+|---|---|
+| `0.1.0`, `0.1` | a release, built from the `v0.1.0` git tag |
+| `latest` | the newest release |
+| `edge` | the current `main`; not a release |
+
+CI publishes a tag only after the unit tests, the MinIO integration suite, the
+apt end-to-end test, the linter and the cross-architecture builds have all
+passed, so a tag that exists is a tag that was tested. Each one carries an SBOM
+and a `mode=max` provenance attestation, both visible on the package page.
+
+Pin by digest for anything you depend on — a tag is mutable, a digest is not:
+
+```sh
+docker pull ghcr.io/nledez/aquifer@sha256:<digest from the package page>
+```
+
+The image expects its configuration at `/etc/aquifer/config.yaml`, keeps its
+cache in `/var/cache/aquifer`, and exposes 8080 for apt clients and 8081 for
+metrics and health. See [configuration.md](docs/configuration.md).
+
 ## Quick start
 
 MinIO stands in for the object store; one edge sits in front of it.
@@ -116,6 +149,10 @@ make stress           # hammer the download coalescer
 make lint             # golangci-lint v2
 make image            # container image for this architecture
 ```
+
+Publishing is CI's job, on a `v*` tag for a release and on every `main` commit
+for `edge`. `make image-push` does the same by hand for both architectures and
+needs `docker login ghcr.io` first.
 
 Two heavier suites, both requiring Docker:
 
