@@ -182,7 +182,9 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        goos: [linux]
+        # The release attaches darwin binaries, so darwin has to compile here.
+        # Compiling is all this proves: nothing runs the suite on darwin.
+        goos: [linux, darwin]
         goarch: [amd64, arm64]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -195,3 +197,73 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
         run: go build -trimpath -ldflags='-s -w' -o /dev/null ./cmd/...
+
+  # Creates the GitHub Release for a tag: the four binaries, their checksums,
+  # and the changelog section `just release` wrote. It waits for publish, so a
+  # release never points at an image that is not in the registry yet.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Each archive carries the licences with the binary, which BSD-3-Clause
+      # and Apache-2.0 section 4 both require of a binary distribution.
+      - name: Build the release archives
+        env:
+          VERSION: ${{ github.ref_name }}
+        run: |
+          version="${VERSION#v}"
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}"
+            arch="${target#*/}"
+            stage="dist/aquifer_${version}_${os}_${arch}"
+            mkdir -p "$stage"
+            GOOS="$os" GOARCH="$arch" go build -trimpath \
+              -ldflags="-s -w -X github.com/nledez/aquifer/internal/cli.version=${version}" \
+              -o "$stage/aquifer" ./cmd/aquifer
+            cp LICENSE THIRD-PARTY-NOTICES.txt "$stage/"
+            tar -C dist -czf "${stage}.tar.gz" "$(basename "$stage")"
+            rm -rf "$stage"
+          done
+          cd dist && sha256sum ./*.tar.gz > SHA256SUMS && cat SHA256SUMS
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          version="${VERSION#v}"
+          notes=$(mktemp)
+          # The section just release wrote, verbatim. Anything else would be a
+          # second, divergent account of the same change.
+          awk -v want="## ${version} " '
+            $0 ~ "^" want { inside = 1; next }
+            inside && /^## / { exit }
+            inside { print }
+          ' CHANGELOG.md > "$notes"
+
+          # A tag cut by hand has no section. Let GitHub write the notes rather
+          # than publish an empty body.
+          generated=()
+          [ -s "$notes" ] || generated=(--generate-notes)
+
+          {
+            echo
+            echo "## Container image"
+            echo
+            echo '```sh'
+            echo "docker pull ghcr.io/${GITHUB_REPOSITORY}:${version}"
+            echo '```'
+          } >> "$notes"
+
+          gh release create "$VERSION" dist/*.tar.gz dist/SHA256SUMS \
+            --title "aquifer ${version}" --notes-file "$notes" "${generated[@]+"${generated[@]}"}"

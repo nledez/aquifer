@@ -126,3 +126,80 @@ image-check: notices buildx-setup
 [doc("A real signed repository, published, served, installed by a real apt")]
 test-apt: (image "apt-test" "aquifer")
     AQUIFER_IMAGE=aquifer:apt-test ./test/apt/run.sh
+
+# --- release --------------------------------------------------------------------
+
+# Pushing the tag is what publishes. CI re-runs the whole suite on the tagged
+# commit and only then pushes the image and creates the GitHub Release, so a
+# tag that fails its build publishes nothing and can simply be superseded.
+[doc("Cuts a release: changelog entry, commit, tag, push")]
+release new_version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    version="{{new_version}}"
+    version="${version#v}"
+    tag="v${version}"
+
+    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+        || { echo "release: '$version' is not MAJOR.MINOR.PATCH" >&2; exit 1; }
+
+    # Everything below refuses rather than repairs: a release cut from a tree
+    # nobody else can see is a release nobody can reproduce.
+    branch=$(git rev-parse --abbrev-ref HEAD)
+    [ "$branch" = main ] || { echo "release: on '$branch', not main" >&2; exit 1; }
+    [ -z "$(git status --porcelain)" ] || { echo "release: the tree is dirty" >&2; exit 1; }
+
+    # Ask origin before fetching, or the fetch below pulls the tag down and the
+    # local check reports it as local. A tag that exists only on the remote
+    # would otherwise surface at the push, with the commit and the tag already
+    # made here.
+    git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1 \
+        && { echo "release: $tag already exists on origin" >&2; exit 1; }
+
+    # Tags come down with the fetch so the changelog range is measured from the
+    # real previous release rather than from whatever this clone happens to hold.
+    git fetch --quiet --tags origin main
+    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
+        || { echo "release: main and origin/main have diverged" >&2; exit 1; }
+
+    git rev-parse -q --verify "refs/tags/$tag" >/dev/null \
+        && { echo "release: $tag already exists locally" >&2; exit 1; }
+
+    previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
+    if [ -n "$previous" ]; then
+        range="${previous}..HEAD"
+        echo "release: $version, changes since $previous"
+    else
+        range=""
+        echo "release: $version, the first tag"
+    fi
+
+    entry=$(mktemp)
+    {
+        printf '## %s - %s\n\n' "$version" "$(date -u +%Y-%m-%d)"
+        git log --no-merges --reverse --pretty='- %s' ${range:+"$range"}
+        printf '\n'
+    } > "$entry"
+
+    if [ ! -f CHANGELOG.md ]; then
+        printf '# Changelog\n\nNewest first. Written by `just release` from the commit subjects\nsince the previous tag.\n\n' > CHANGELOG.md
+    fi
+
+    # Insert the new section directly under the file's preamble, so the file
+    # reads newest first without rewriting what is already there.
+    updated=$(mktemp)
+    awk -v entry="$entry" '
+        !inserted && /^## / { while ((getline line < entry) > 0) print line; inserted = 1 }
+        { print }
+        END { if (!inserted) { while ((getline line < entry) > 0) print line } }
+    ' CHANGELOG.md > "$updated"
+    mv "$updated" CHANGELOG.md
+    rm -f "$entry"
+
+    git add CHANGELOG.md
+    git commit -m "release: aquifer ${version}"
+    git tag -a "$tag" -m "aquifer ${version}"
+    git push origin main "$tag"
+
+    echo "release: pushed main and $tag; CI publishes once it is green"

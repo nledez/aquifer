@@ -167,6 +167,22 @@ serves it from an edge running read-only as non-root, and installs a package
 with a real apt — for every configured suite and architecture, checking that
 the installed package actually runs.
 
+## Releasing
+
+```sh
+just release 0.2.0
+```
+
+It writes the changelog entry from the commits since the last tag, commits it,
+tags `v0.2.0` and pushes both. It refuses to run from a dirty tree, from
+anywhere but `main`, or when `main` and `origin/main` have diverged.
+
+Pushing the tag is what publishes. CI runs the whole suite on the tagged
+commit, then pushes the image and creates the GitHub Release with the four
+binaries and their checksums. A tag whose build fails publishes nothing.
+`just image-push` remains the manual fallback for the image alone, and needs a
+`docker login ghcr.io` first.
+
 ## License
 
 BSD 3-Clause. See [LICENSE](LICENSE).
