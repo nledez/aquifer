@@ -13,7 +13,7 @@ Modules:
   - github.com/cespare/xxhash/v2 v2.3.0
   - github.com/dustin/go-humanize v1.0.1
   - github.com/google/uuid v1.6.0
-  - github.com/klauspost/compress v1.19.1
+  - github.com/klauspost/compress v1.19.2
   - github.com/klauspost/cpuid/v2 v2.2.11
   - github.com/klauspost/crc32 v1.3.0
   - github.com/minio/crc64nvme v1.1.1
@@ -174,7 +174,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-github.com/klauspost/compress v1.19.1 -- LICENSE
+github.com/klauspost/compress v1.19.2 -- LICENSE
 ==============================================================================
 
 Copyright (c) 2012 The Go Authors. All rights reserved.
@@ -483,7 +483,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
-github.com/klauspost/compress v1.19.1 -- internal/snapref/LICENSE
+github.com/klauspost/compress v1.19.2 -- internal/snapref/LICENSE
 ==============================================================================
 
 Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.
@@ -515,7 +515,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-github.com/klauspost/compress v1.19.1 -- s2/LICENSE
+github.com/klauspost/compress v1.19.2 -- s2/LICENSE
 ==============================================================================
 
 Copyright (c) 2011 The Snappy-Go Authors. All rights reserved.
@@ -548,7 +548,7 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ==============================================================================
-github.com/klauspost/compress v1.19.1 -- zstd/internal/xxhash/LICENSE.txt
+github.com/klauspost/compress v1.19.2 -- zstd/internal/xxhash/LICENSE.txt
 ==============================================================================
 
 Copyright (c) 2016 Caleb Spare
