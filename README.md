@@ -139,29 +139,29 @@ debian/bookworm 1785951702-9c1ad3f1: 794 entries, 17.4 GiB; uploaded 0 blobs (0 
 
 ## Building
 
-Requires Go 1.26+. `CGO_ENABLED=0` throughout; no dependency may need cgo.
+Requires Go 1.26+ and [just](https://github.com/casey/just) 1.27+, which is
+where the `[doc]` attribute the recipes use arrived. CI pins 1.58.0.
+`CGO_ENABLED=0` throughout; no dependency may need cgo.
+
+Tasks run through just; `just` on its own lists them.
 
 ```sh
-make build            # static binary into dist/
-make test             # unit tests
-make race             # with the race detector
-make stress           # hammer the download coalescer
-make lint             # golangci-lint v2
-make image            # container image for this architecture
+just build            # static binary into dist/
+just test             # unit tests
+just race             # with the race detector
+just stress           # hammer the download coalescer
+just lint             # golangci-lint v2
+just image            # container image for this architecture
 ```
-
-Publishing is CI's job, on a `v*` tag for a release and on every `main` commit
-for `edge`. `make image-push` does the same by hand for both architectures and
-needs `docker login ghcr.io` first.
 
 Two heavier suites, both requiring Docker:
 
 ```sh
-make test-integration # the blobstore contract against a real MinIO
-make test-apt         # a real signed repository installed by a real apt
+just test-integration # the blobstore contract against a real MinIO
+just test-apt         # a real signed repository installed by a real apt
 ```
 
-`make test-apt` is the one that proves the system works: it builds a signed
+`just test-apt` is the one that proves the system works: it builds a signed
 Debian repository with `dpkg-scanpackages` and `apt-ftparchive`, publishes it,
 serves it from an edge running read-only as non-root, and installs a package
 with a real apt — for every configured suite and architecture, checking that

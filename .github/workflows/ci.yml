@@ -23,6 +23,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: 1.58.0
 
       - name: Verify go.mod is tidy
         run: |
@@ -32,19 +35,19 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      # Through the Makefile, which is where the race detector's cgo
+      # Through the Justfile, which is where the race detector's cgo
       # requirement is dealt with: the CGO_ENABLED=0 above would otherwise
       # make the Go toolchain refuse -race.
       - name: Test with race detector
-        run: make race
+        run: just race
 
       # The download coalescer is the critical section of the whole project.
       # Repeat it to shake out scheduling-dependent races.
       - name: Stress the coalescer
-        run: make stress
+        run: just stress
 
       - name: Verify third-party notices are up to date
-        run: make notices-check
+        run: just notices-check
 
   integration:
     runs-on: ubuntu-latest
@@ -55,11 +58,15 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: 1.58.0
+
       # Exercises the blobstore contract against a real S3 implementation.
       # The in-memory double cannot tell us whether conditional GETs,
       # path-style addressing or listing pagination actually work.
       - name: Integration tests against MinIO
-        run: make test-integration
+        run: just test-integration
 
   # Proves the Dockerfile still builds for both architectures. Only pull
   # requests need this: a push goes on to publish, which builds the same thing
@@ -147,12 +154,15 @@ jobs:
           cache: true
       - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+      - uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3 # v4
+        with:
+          just-version: 1.58.0
 
       # The only test that proves the whole system works: a real signed Debian
       # repository, published, served by an edge, installed by a real apt, for
       # every configured suite and architecture.
       - name: apt integration test
-        run: make test-apt
+        run: just test-apt
 
   lint:
     runs-on: ubuntu-latest

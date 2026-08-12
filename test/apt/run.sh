@@ -7,7 +7,7 @@
 # verification, by-hash acquisition and dependency resolution, and the packages
 # it installs have to actually run.
 #
-#   make test-apt
+#   just test-apt
 #
 # Requires Docker with binfmt support for cross-architecture containers.
 
