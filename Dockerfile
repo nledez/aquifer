@@ -15,7 +15,7 @@
 # why the Go version is spelled out here rather than kept in an ARG.
 #
 # The Go version must match go.mod and .tool-versions.
-FROM --platform=$BUILDPLATFORM golang:1.26.5-bookworm@sha256:6c5605ab3a9a9fb3c4eafe5b3d63cdbf3881caf113262b67862547b54a9db599 AS builder
+FROM --platform=$BUILDPLATFORM golang:1.27.0-bookworm@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder
 
 WORKDIR /src
 
